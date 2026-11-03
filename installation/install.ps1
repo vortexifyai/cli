@@ -20,6 +20,8 @@ $temporaryDirectory = $null
 $stagedBinary = $null
 
 try {
+    # A parent PowerShell 7 process can pass incompatible module paths to 5.1.
+    Import-Module ([IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1')) -ErrorAction Stop
     if ($env:OS -ne 'Windows_NT') { throw 'This installer supports Windows only.' }
     $architecture = $env:PROCESSOR_ARCHITEW6432
     if (-not $architecture) { $architecture = $env:PROCESSOR_ARCHITECTURE }

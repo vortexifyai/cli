@@ -249,6 +249,7 @@ func (c *Client) Install(ctx context.Context, release Release, executable string
 const windowsCompletionScript = `param([int]$ParentProcessId, [string]$InstallerPath, [string]$BaseUrl, [string]$InstallDir)
 $ErrorActionPreference = 'Stop'
 try {
+    Import-Module ([IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1')) -ErrorAction Stop
     $parent = Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue
     if ($parent -and -not $parent.WaitForExit(120000)) { throw 'The CLI is still running. Close it and run the updater again.' }
     & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $InstallerPath -BaseUrl $BaseUrl -InstallDir $InstallDir

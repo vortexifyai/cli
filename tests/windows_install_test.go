@@ -186,6 +186,7 @@ function global:Invoke-WebRequest {
     Add-Content -LiteralPath (Join-Path $env:TASK_INSTALL_RELEASE 'requests.txt') -Value $name
     Copy-Item -LiteralPath (Join-Path $env:TASK_INSTALL_RELEASE $name) -Destination $OutFile
 }
+
 & $env:TASK_INSTALL_SCRIPT -InstallDir (Join-Path $env:TASK_INSTALL_RELEASE 'downloaded bin') -NoPathUpdate
 exit $LASTEXITCODE
 `
@@ -201,5 +202,49 @@ exit $LASTEXITCODE
 	requests, err := os.ReadFile(filepath.Join(root, "requests.txt"))
 	if err != nil || strings.Join(strings.Fields(string(requests)), ",") != "SHA256SUMS,vortexify-windows-amd64.exe" {
 		t.Fatalf("unexpected downloads: %q, error=%v", requests, err)
+	}
+}
+
+func TestWindowsInstallerInheritedModulePath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("requires Windows PowerShell")
+	}
+	root := t.TempDir()
+	module := filepath.Join(root, "modules", "Microsoft.PowerShell.Utility")
+	if err := os.MkdirAll(module, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Model an incompatible Utility module inherited from PowerShell 7.
+	files := map[string][]byte{
+		filepath.Join(module, "Microsoft.PowerShell.Utility.psd1"): []byte("@{ ModuleVersion = '99.0.0'; RootModule = 'incompatible.psm1' }"),
+		filepath.Join(module, "incompatible.psm1"):                 []byte("throw 'Incompatible inherited Utility module'"),
+		filepath.Join(root, "vortexify-windows-amd64.exe"):         []byte("verified release"),
+		filepath.Join(root, "SHA256SUMS"):                          []byte(fmt.Sprintf("%x  vortexify-windows-amd64.exe\n", sha256.Sum256([]byte("verified release")))),
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script, err := filepath.Abs(filepath.Join("..", "installation", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := `
+$ErrorActionPreference = 'Stop'
+$env:PSModulePath = $env:TASK_INSTALL_MODULES + ';' + $env:PSModulePath
+Remove-Module Microsoft.PowerShell.Utility -ErrorAction SilentlyContinue
+& $env:TASK_INSTALL_SCRIPT -FromDir $env:TASK_INSTALL_RELEASE -InstallDir $env:TASK_INSTALL_DESTINATION -NoPathUpdate
+exit $LASTEXITCODE
+`
+	destination := filepath.Join(root, "installed")
+	cmd := windowsInstallerCommand(t, script, "-Command", command)
+	cmd.Env = append(cmd.Env, "TASK_INSTALL_RELEASE="+root, "TASK_INSTALL_MODULES="+filepath.Join(root, "modules"), "TASK_INSTALL_DESTINATION="+destination)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("installer failed with inherited module path: %v\n%s", err, output)
+	}
+	got, err := os.ReadFile(filepath.Join(destination, "vortexify.exe"))
+	if err != nil || string(got) != "verified release" {
+		t.Fatalf("installed executable=%q, error=%v", got, err)
 	}
 }

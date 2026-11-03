@@ -16,6 +16,9 @@ jobs:
   windows-installer:
     runs-on: windows-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
     permissions:
       contents: read
     steps:

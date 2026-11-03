@@ -295,7 +295,7 @@ vortexify blueprints read dashboard
 
 ## Install coding-agent skills
 
-Install the Vortexify skills plugin for your coding tool:
+Install the [Vortexify skills plugin](https://github.com/vortexifyai/skills) for your coding tool:
 
 ```sh
 vortexify skills install --agent codex
