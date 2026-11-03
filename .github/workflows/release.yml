@@ -1,0 +1,76 @@
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Test Windows PowerShell installer
+        run: go test ./tests -run '^TestWindowsInstaller' -count=1
+      - name: Test Windows CLI updater
+        run: go test ./internal/update ./cmd -run '^(TestWindows|TestUpdate|TestCompare|TestLatest|TestInstall|TestUntrusted|TestMissingAsset)' -count=1
+      - name: Verify Windows executable installation
+        shell: powershell
+        run: |
+          $release = Join-Path $env:RUNNER_TEMP 'vortexify-release'
+          $destination = Join-Path $env:RUNNER_TEMP 'vortexify-bin'
+          New-Item -ItemType Directory -Path $release | Out-Null
+          $binary = Join-Path $release 'vortexify-windows-amd64.exe'
+          go build -o $binary .
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
+          $hash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
+          "$hash  vortexify-windows-amd64.exe" | Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS') -Encoding ASCII
+          & ./installation/install.ps1 -FromDir $release -InstallDir $destination -NoPathUpdate
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installation failed.' }
+          & (Join-Path $destination 'vortexify.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Installed executable failed.' }
+  release:
+    needs: windows-installer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Validate release version
+        run: '[[ "$RELEASE_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]'
+      - name: Test CLI and installer
+        run: go test ./...
+      - name: Build executables
+        run: make release VERSION="$RELEASE_VERSION"
+      - name: Prepare release downloads
+        run: |
+          for installer in install.sh install.ps1; do
+            sed "s|https://github.com/vortexifyai/cli/releases/latest/download|https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_VERSION}|g" "installation/$installer" > "dist/$installer"
+          done
+          cd dist
+          sha256sum vortexify-* install.sh install.ps1 > SHA256SUMS
+      - name: Verify release installer
+        run: |
+          sh dist/install.sh --from-dir dist --install-dir "$RUNNER_TEMP/vortexify-bin"
+          "$RUNNER_TEMP/vortexify-bin/vortexify" --version
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$RELEASE_VERSION" dist/vortexify-* dist/install.sh dist/install.ps1 dist/SHA256SUMS --verify-tag --generate-notes
