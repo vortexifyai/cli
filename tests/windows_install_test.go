@@ -141,14 +141,18 @@ $ErrorActionPreference = 'Stop'
 $global:LASTEXITCODE = 0
 $original = [Environment]::GetEnvironmentVariable('Path', 'User')
 $destination = Join-Path $env:TASK_INSTALL_RELEASE 'installed bin'
+# The installer expands short Windows paths (such as RUNNER~1) to long paths.
+$registeredDestination = [IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($destination))
+$expected = if ($original) { $original.TrimEnd(';') + ';' + $registeredDestination } else { $registeredDestination }
 try {
     & $env:TASK_INSTALL_SCRIPT -FromDir $env:TASK_INSTALL_RELEASE -InstallDir $destination
     if ($LASTEXITCODE -ne 0) { throw 'First install failed.' }
+    $first = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($first -ne $expected) { throw "First installation changed PATH unexpectedly. Expected: [$expected] Actual: [$first]" }
     & $env:TASK_INSTALL_SCRIPT -FromDir $env:TASK_INSTALL_RELEASE -InstallDir $destination
     if ($LASTEXITCODE -ne 0) { throw 'Second install failed.' }
     $actual = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $expected = if ($original) { $original.TrimEnd(';') + ';' + $destination } else { $destination }
-    if ($actual -ne $expected) { throw 'User PATH was duplicated or existing entries changed.' }
+    if ($actual -ne $first) { throw "Second installation changed PATH. Before: [$first] After: [$actual]" }
 } finally {
     [Environment]::SetEnvironmentVariable('Path', $original, 'User')
 }
