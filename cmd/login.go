@@ -31,7 +31,7 @@ func newLoginCommand() *cobra.Command {
 		fmt.Fprintln(cmd.OutOrStdout(), "Logged in to Vortexify.")
 		return nil
 	}}
-	command.Flags().BoolVar(&dev, "dev", false, "Log in at https://vortexify.dev/login/oauth using development OAuth")
+	command.Flags().BoolVar(&dev, "dev", false, "Log in at https://dashboard.vortexify.dev/login/oauth using development OAuth")
 	command.Flags().BoolVar(&devLocal, "dev-local", false, "Log in at http://localhost:5173/login/oauth using development OAuth")
 	command.MarkFlagsMutuallyExclusive("dev", "dev-local")
 	command.Flags().String("login-url", os.Getenv("VORTEXIFY_LOGIN_URL"), "Override the browser authorization URL")
@@ -44,7 +44,7 @@ func newLoginCommand() *cobra.Command {
 func loginOptions(cmd *cobra.Command, dev, devLocal bool) auth.LoginOptions {
 	options := auth.LoginOptions{LoginURL: prodOAuthLoginURL, ClientID: prodOAuthClientID, TokenURL: prodOAuthTokenURL, Output: cmd.OutOrStdout()}
 	if dev || devLocal {
-		options.LoginURL = "https://vortexify.dev/login/oauth"
+		options.LoginURL = "https://dashboard.vortexify.dev/login/oauth"
 		options.ClientID = devOAuthClientID
 		options.TokenURL = devOAuthTokenURL
 	}

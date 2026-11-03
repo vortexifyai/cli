@@ -12,7 +12,7 @@ func TestLoginEnvironmentPresets(t *testing.T) {
 		url   string
 	}{
 		{"production", nil, "https://dashboard.vortexify.ai/login/oauth"},
-		{"dev", []string{"--dev"}, "https://vortexify.dev/login/oauth"},
+		{"dev", []string{"--dev"}, "https://dashboard.vortexify.dev/login/oauth"},
 		{"local", []string{"--dev-local"}, "http://localhost:5173/login/oauth"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
