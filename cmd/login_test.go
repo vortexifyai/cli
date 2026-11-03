@@ -33,7 +33,7 @@ func TestLoginEnvironmentPresets(t *testing.T) {
 				if options.ClientID != devOAuthClientID || options.TokenURL != devOAuthTokenURL {
 					t.Fatal("missing dev OAuth defaults")
 				}
-			} else if options.ClientID != "yMhbWleHiewpXd0E" || options.TokenURL != "https://clerk.vortexify.app/oauth/token" {
+			} else if options.ClientID != "r0z5faTL2FZJn58I" || options.TokenURL != "https://clerk.vortexify.ai/oauth/token" {
 				t.Fatal("missing production OAuth defaults")
 			}
 		})

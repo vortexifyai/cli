@@ -10,8 +10,8 @@ import (
 
 const devOAuthClientID = "sIuJc9gIdE8ihEpD"
 const devOAuthTokenURL = "https://gentle-mackerel-92.clerk.accounts.dev/oauth/token"
-const prodOAuthClientID = "yMhbWleHiewpXd0E"
-const prodOAuthTokenURL = "https://clerk.vortexify.app/oauth/token"
+const prodOAuthClientID = "r0z5faTL2FZJn58I"
+const prodOAuthTokenURL = "https://clerk.vortexify.ai/oauth/token"
 const prodOAuthLoginURL = "https://dashboard.vortexify.ai/login/oauth"
 
 func newLoginCommand() *cobra.Command {
