@@ -33,18 +33,20 @@ func (c *Client) GetFunctionEnvironment(ctx context.Context, projectID, function
 }
 
 type Resource struct {
-	Files            *resources.FileStatus `json:"files,omitempty"`
-	Environment      *Environment          `json:"environment,omitempty"`
-	ID               string                `json:"id"`
-	Type             string                `json:"type"`
-	Name             string                `json:"name"`
-	Version          int                   `json:"version"`
-	CodeHash         string                `json:"code_hash"`
-	HasCode          bool                  `json:"has_code"`
-	DeploymentStatus string                `json:"deployment_status"`
-	ConnectorID      string                `json:"connector_id"`
-	HealthStatus     string                `json:"health_status"`
-	PlanStatus       string                `json:"plan_status"`
+	MigrationStatus      string                `json:"migration_status,omitempty"`
+	MigrationEnvironment string                `json:"migration_environment,omitempty"`
+	Files                *resources.FileStatus `json:"files,omitempty"`
+	Environment          *Environment          `json:"environment,omitempty"`
+	ID                   string                `json:"id"`
+	Type                 string                `json:"type"`
+	Name                 string                `json:"name"`
+	Version              int                   `json:"version"`
+	CodeHash             string                `json:"code_hash"`
+	HasCode              bool                  `json:"has_code"`
+	DeploymentStatus     string                `json:"deployment_status"`
+	ConnectorID          string                `json:"connector_id"`
+	HealthStatus         string                `json:"health_status"`
+	PlanStatus           string                `json:"plan_status"`
 }
 
 func (c *Client) ListResources(ctx context.Context, projectID string) ([]Resource, error) {

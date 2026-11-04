@@ -124,6 +124,8 @@ def references(files, kind):
                 if isinstance(call, ast.Call) and sdk(path, call.func) == "Agent":
                     found += 1
                     for keyword in call.keywords:
+                        if keyword.arg == "name":
+                            raise ValueError("Agent.name was removed; identity comes from the registered resource")
                         if keyword.arg in {"context", "tools"}: collect(value(path, keyword.value))
             elif kind in {"connector", "sync"} and isinstance(node, ast.ClassDef):
                 if any(sdk(path, base) == ("Connector" if kind == "connector" else "Sync") for base in node.bases): found += 1

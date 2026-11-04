@@ -28,7 +28,7 @@ func runOrganizationCommand(input string, args ...string) (string, string, error
 
 func TestProjectsSelectOrganizationPerInvocation(t *testing.T) {
 	t.Setenv("VORTEXIFY_TOKEN", "token")
-	t.Setenv("VORTEXIFY_ORG_ID", "ignored-default")
+	t.Setenv("VORTEXIFY_ORG_ID", "")
 	var organizations int
 	var selected []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +109,7 @@ func TestOrganizationSelectionDoesNotSilentlyChoose(t *testing.T) {
 
 func TestInitOrganizationSelection(t *testing.T) {
 	t.Setenv("VORTEXIFY_TOKEN", "token")
-	t.Setenv("VORTEXIFY_ORG_ID", "ignored")
+	t.Setenv("VORTEXIFY_ORG_ID", "")
 	for _, attach := range []bool{false, true} {
 		t.Run(map[bool]string{false: "create", true: "attach"}[attach], func(t *testing.T) {
 			t.Chdir(t.TempDir())
@@ -266,5 +266,33 @@ func TestKnowledgeGraphEnableShowsCapacityAndRequiresConfirmation(t *testing.T) 
 	_, _, err = runOrganizationCommand("", append(base, "--yes")...)
 	if err == nil || !strings.Contains(err.Error(), "capacity exceeded") || enables != 1 {
 		t.Fatal(err, enables)
+	}
+}
+
+func TestOrganizationEnvironmentDefaultAndFlagOverride(t *testing.T) {
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	t.Setenv("VORTEXIFY_ORG_ID", "environment-org")
+	var selected string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/api/v2/platform/projects/list_projects" {
+			t.Errorf("unexpected selection prompt: %s", req.URL.Path)
+		}
+		var payload map[string]any
+		json.NewDecoder(req.Body).Decode(&payload)
+		selected, _ = payload["org_id"].(string)
+		json.NewEncoder(w).Encode([]api.Project{})
+	}))
+	defer server.Close()
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"projects", "list"}, "environment-org"},
+		{[]string{"projects", "list", "--org-id", "explicit-org"}, "explicit-org"},
+	} {
+		_, prompts, err := runOrganizationCommand("", append([]string{"--api-url", server.URL}, tc.args...)...)
+		if err != nil || prompts != "" || selected != tc.want {
+			t.Fatal(selected, prompts, err)
+		}
 	}
 }

@@ -122,6 +122,26 @@ func TestLogsIncludesAppAndShellBuildChildren(t *testing.T) {
 	}
 }
 
+func TestLogsShowsEvictionReasonWhenContainerLogsAreUnavailable(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	config.Save(root, config.Default("project", "demo", ""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"job_id": "build", "logs": "", "status": "failed",
+			"logs_error":          "Container logs unavailable",
+			"failure_reason_code": "POD_EVICTED",
+			"failure_message":     "Pod exceeded ephemeral storage limit of 2Gi",
+		})
+	}))
+	defer server.Close()
+	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "logs", "build")
+	if err != nil || !strings.Contains(out, "Pod exceeded ephemeral storage limit of 2Gi") || !strings.Contains(out, "Logs unavailable:") {
+		t.Fatal(out, err)
+	}
+}
+
 func TestAppDeploymentSubdomain(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

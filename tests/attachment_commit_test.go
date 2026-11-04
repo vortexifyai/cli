@@ -16,7 +16,7 @@ import (
 func TestCommitAttachmentOnlyChanges(t *testing.T) {
 	root, cfg := workspace(t)
 	cfg.Agents = &config.ResourceFolder{Folder: "agents"}
-	file(t, root, "agents/support/main.py", "from vortexify import Agent\nagent = Agent(name='support')\n")
+	file(t, root, "agents/support/main.py", "from vortexify import Agent\nagent = Agent()\n")
 	local, err := resources.Scan(root, cfg)
 	if err != nil || len(local) != 1 {
 		t.Fatalf("scan: %v %v", local, err)

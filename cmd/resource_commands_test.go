@@ -179,3 +179,60 @@ func TestCreateSyncUsesOwningConnectorFolderAndBasenamePayload(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateCanResumeAfterStarterVerificationFailure(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	config.Save(root, config.Default("project", "demo", ""))
+	starter := t.TempDir()
+	os.WriteFile(filepath.Join(starter, "main.py"), []byte("correct starter"), 0644)
+	hash, _ := resources.HashDirectory(starter)
+	var good bytes.Buffer
+	resources.CreateArchive(starter, &good)
+	bad := t.TempDir()
+	os.WriteFile(filepath.Join(bad, "main.py"), []byte("wrong bytes"), 0644)
+	var corrupt bytes.Buffer
+	resources.CreateArchive(bad, &corrupt)
+	creates, downloads := 0, 0
+	server := httptest.NewServer(withProjectFiles(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/api/v2/artifacts/resources/get_resource_graph":
+			rows := []resources.Registered{}
+			if creates > 0 {
+				rows = append(rows, resources.Registered{ID: "id", Type: "transform", Name: "orders", Version: 1, CodeHash: hash, HasCode: true})
+			}
+			json.NewEncoder(w).Encode(rows)
+		case "/api/v2/artifacts/resources/initialize_resource":
+			creates++
+			json.NewEncoder(w).Encode(api.Resource{ID: "id", Type: "transform", Name: "orders", Version: 1, CodeHash: hash, HasCode: true})
+		case "/api/v2/execution/code/pull_resource":
+			downloads++
+			if downloads == 1 {
+				w.Write(corrupt.Bytes())
+			} else {
+				w.Write(good.Bytes())
+			}
+		default:
+			t.Errorf("unexpected endpoint %s", req.URL.Path)
+		}
+	})))
+	defer server.Close()
+	args := []string{"--api-url", server.URL, "--org-id", "org", "create", "transform", "orders"}
+	if _, err := run(t, append(args, "--resume")...); err == nil || creates != 0 {
+		t.Fatal("resume must not register a missing resource", creates, err)
+	}
+	if _, err := run(t, args...); err == nil || !strings.Contains(err.Error(), "hash mismatch") {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "transforms/orders")); !os.IsNotExist(err) {
+		t.Fatal("installed invalid source")
+	}
+	if _, err := run(t, append(args, "--resume")...); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(filepath.Join(root, "transforms/orders/main.py"))
+	if string(body) != "correct starter" || creates != 1 || downloads != 2 {
+		t.Fatal(string(body), creates, downloads)
+	}
+}

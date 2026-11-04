@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"vortexify-cli/internal/api"
 	"vortexify-cli/internal/resources"
 	"vortexify-cli/internal/state"
 	workspacefs "vortexify-cli/internal/workspace"
@@ -13,13 +14,14 @@ import (
 
 func newCreateCommand(opts *options) *cobra.Command {
 	var connector string
+	var resume bool
 	command := &cobra.Command{Use: "create <type> <name>", Short: "Register a resource and add starter code without replacing local files", Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
 		kind, name := args[0], args[1]
 		if err := (resources.Filter{Type: kind}).Validate(); err != nil {
 			return err
 		}
 		if kind != "sync" {
-			if err := resources.ValidateName(name); err != nil {
+			if err := resources.ValidateResourceName(kind, name); err != nil {
 				return err
 			}
 		}
@@ -81,19 +83,37 @@ func newCreateCommand(opts *options) *cobra.Command {
 		} else if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		for _, row := range registry {
-			if row.Type == kind && row.Name == name {
-				return fmt.Errorf("%s/%s is already registered; use pull to retrieve it", kind, name)
+		var row *api.Resource
+		for _, registered := range registry {
+			if registered.Type == kind && registered.Name == name {
+				if !resume {
+					return fmt.Errorf("%s/%s is already registered; use create %s %s --resume to recover a missing local starter, or pull", kind, name, kind, name)
+				}
+				if _, statErr := os.Lstat(target); !os.IsNotExist(statErr) {
+					return fmt.Errorf("resume requires a missing local resource folder; existing files were preserved")
+				}
+				row = &api.Resource{ID: registered.ID, Type: kind, Name: name, Version: registered.Version, CodeHash: registered.CodeHash, HasCode: registered.HasCode}
 			}
 		}
-
-		row, err := client.CreateResource(cmd.Context(), cfg.ProjectID, kind, name, connector)
-		if err != nil {
-			return err
+		if row == nil {
+			if resume {
+				return fmt.Errorf("%s/%s is not registered; omit --resume to create it", kind, name)
+			}
+			row, err = client.CreateResource(cmd.Context(), cfg.ProjectID, kind, name, connector)
+			if err != nil {
+				return err
+			}
 		}
 		if row.ID == "" || row.Type != kind || row.Name != name {
 			return fmt.Errorf("invalid registration response; check status before retrying")
 		}
+		// Registration is durable even if downloading/verifying the starter fails.
+		registeredID := row.ID
+		defer func() {
+			if _, statErr := os.Lstat(target); os.IsNotExist(statErr) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Registered %s/%s (%s). Local starter is missing; recover with: vortexify create %s %s --resume\n", kind, name, registeredID, kind, name)
+			}
+		}()
 		st, err := state.Load(root)
 		if err != nil {
 			return err
@@ -146,5 +166,6 @@ func newCreateCommand(opts *options) *cobra.Command {
 		return nil
 	}}
 	command.Flags().StringVar(&connector, "connector", "", "Registered connector name or ID for a sync")
+	command.Flags().BoolVar(&resume, "resume", false, "Recover the local source for an already registered resource without registering it again")
 	return command
 }

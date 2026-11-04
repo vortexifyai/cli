@@ -78,6 +78,9 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 		}
 		if job := status.LatestMigration; job != nil {
 			fmt.Fprintf(out, "  Latest migration: %s (version %d)\n  Migration job: %s\n", job.Status, job.Version, job.ID)
+			if job.Status == "failed" || job.Status == "stopped" {
+				fmt.Fprintf(out, "  To submit a new migration job: vortexify database %s --approve %d\n", args[0], job.Version)
+			}
 		}
 		if len(status.LatestBackups) == 0 {
 			fmt.Fprintln(out, "  Backups: no jobs yet")

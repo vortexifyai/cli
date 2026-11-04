@@ -124,6 +124,31 @@ func TestRoundtripConflictAndCollectionBoundary(t *testing.T) {
 	if _, err = Sync(context.Background(), root, cfg, client, true, io.Discard); err == nil {
 		t.Fatal("overwrote server edit")
 	}
+	if _, err = Sync(context.Background(), root, cfg, client, false, io.Discard, true); err != nil {
+		t.Fatal(err)
+	}
+	body, _ = os.ReadFile(filepath.Join(root, ".vortexify/context/notes.md"))
+	if string(body) != "remote" {
+		t.Fatal("remote was not installed", string(body))
+	}
+	backups, _ := filepath.Glob(filepath.Join(root, ".vortexify/backups/context-*.tar.gz"))
+	if len(backups) != 1 {
+		t.Fatal("missing conflict backup", backups)
+	}
+	restored := t.TempDir()
+	archive, err := os.Open(backups[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = resources.ExtractArchive(archive, restored)
+	archive.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = os.ReadFile(filepath.Join(restored, "notes.md"))
+	if string(body) != "keep me" {
+		t.Fatal("backup lost local edit", string(body))
+	}
 	if _, err = resources.ResourceRelativePath(cfg, "context", "../outside"); err == nil {
 		t.Fatal("collection path escaped")
 	}

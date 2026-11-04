@@ -54,7 +54,7 @@ func TestGraphDistinguishesTableProducersFromExplicitConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	node := graph["transform:review"]
-	if len(node.Problems) != 0 || strings.Join(node.Upstream, ",") != "database:ops,table:table" || strings.Join(node.DirectUpstream, ",") != "database:ops" {
+	if len(node.Problems) != 0 || strings.Join(node.Upstream, ",") != "database:ops" || strings.Join(node.DirectUpstream, ",") != "database:ops" {
 		t.Fatalf("unexpected dependency provenance: %+v", node)
 	}
 }
@@ -125,7 +125,7 @@ func TestReadReferencesRejectsDynamicCalls(t *testing.T) {
 		t.Fatal("dynamic source accepted")
 	}
 }
-func TestTableReferenceNeedsPublishedTableAndCorrectConnector(t *testing.T) {
+func TestTableReferenceNeedsCommittedProducerButNotPublishedData(t *testing.T) {
 	row := graphSource(t, "final", "")
 	source := `from vortexify import Table, vxfy_transform
 @vxfy_transform(inputs={"rows": Table("shop.orders")})
@@ -137,8 +137,8 @@ def run(rows): return rows
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Order(map[string]bool{"transform:final": true}); err == nil {
-		t.Fatal("committing code incorrectly created table data")
+	if _, err := g.Order(map[string]bool{"transform:final": true}); err != nil {
+		t.Fatal("source commit must not require a successful producer run", err)
 	}
 	remote = append(remote, Registered{ID: "table", Type: "table", Name: "default", SyncID: "s", ConnectorID: "c", HasCode: true, UpstreamIDs: []string{"s"}})
 	g, err = BuildGraph(context.Background(), []Resource{row}, remote)
@@ -161,7 +161,7 @@ SCHEDULE = TriggerSchedule(triggers=[TransformOutput("source.named")])
 def run(): return None
 `, 1},
 		{"agent", `from vortexify import Agent, ApiRunner, TransformOutput
-agent = Agent(name="assistant", context=[TransformOutput("source.named")], tools=[ApiRunner("lookup")])
+agent = Agent(context=[TransformOutput("source.named")], tools=[ApiRunner("lookup")])
 `, 2},
 	} {
 		dir := t.TempDir()
@@ -169,6 +169,42 @@ agent = Agent(name="assistant", context=[TransformOutput("source.named")], tools
 		refs, err := ReadReferences(context.Background(), Resource{Type: example.kind, Name: "example", Path: dir})
 		if err != nil || len(refs) != example.want {
 			t.Fatal(refs, err)
+		}
+	}
+}
+
+func TestUploadedTableNamespaceResolvesOnlyUploads(t *testing.T) {
+	for _, kind := range []string{"upload", "sync", "transform", ""} {
+		row := graphSource(t, "consumer", `"rows": Table("_upload.customers")`)
+		os.WriteFile(filepath.Join(row.Path, "main.py"), []byte("from vortexify import Table, vxfy_transform\n@vxfy_transform(inputs={\"rows\":Table(\"_upload.customers\")})\ndef run(rows): return rows\n"), 0644)
+		graph, err := BuildGraph(context.Background(), []Resource{row}, []Registered{{ID: "uploaded", Type: "table", Name: "customers", SourceType: kind, HasCode: true}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = graph.Order(map[string]bool{"transform:consumer": true})
+		if (err == nil) != (kind == "upload") {
+			t.Fatalf("source %q: %v", kind, err)
+		}
+	}
+	if ValidateResourceName("connector", "_upload") == nil {
+		t.Fatal("reserved namespace accepted")
+	}
+}
+
+func TestAgentNameIsNotADeclarationProperty(t *testing.T) {
+	for _, named := range []bool{false, true} {
+		dir := t.TempDir()
+		declaration := "Agent(prompt='Help')"
+		if named {
+			declaration = "Agent(name='legacy')"
+		}
+		os.WriteFile(filepath.Join(dir, "agent.py"), []byte("from vortexify import Agent\nagent="+declaration+"\n"), 0644)
+		_, err := ReadReferences(context.Background(), Resource{Type: "agent", Name: "registered", Path: dir})
+		if named && (err == nil || !strings.Contains(err.Error(), "Agent.name")) {
+			t.Fatal(err)
+		}
+		if !named && err != nil {
+			t.Fatal(err)
 		}
 	}
 }

@@ -20,6 +20,7 @@ type FileStatus struct {
 }
 
 type Registered struct {
+	SourceType  string      `json:"source_type"`
 	Files       *FileStatus `json:"files,omitempty"`
 	ID          string      `json:"id"`
 	Type        string      `json:"type"`
@@ -118,35 +119,27 @@ func BuildGraph(ctx context.Context, local []Resource, remote []Registered) (Gra
 			case "Secret":
 				direct(Key("secret", ref.Name))
 			case "Table", "DatabaseTable":
+				if ref.Kind == "Table" && parts[0] == "_upload" {
+					matches := []string{}
+					for key, table := range graph {
+						if table.Remote != nil && table.Remote.Type == "table" && table.Remote.SourceType == "upload" && table.Remote.Name == parts[1] {
+							matches = append(matches, key)
+						}
+					}
+					if len(matches) != 1 {
+						node.Problems = append(node.Problems, "expected one uploaded table: "+ref.Name)
+					} else {
+						add(matches[0])
+					}
+					continue
+				}
 				parent := Key("database", parts[0])
 				if ref.Kind == "Table" {
 					parent = Key("sync", parts[0]+"/"+parts[1])
 					add(Key("connector", parts[0]))
 				}
+				// Commit source against its producer; published data is required at execution.
 				add(parent)
-				matches := []string{}
-				for key, table := range graph {
-					if table.Remote == nil || table.Remote.Type != "table" {
-						continue
-					}
-					p := graph[parent]
-					if p == nil || p.Remote == nil {
-						continue
-					}
-					if ref.Kind == "Table" {
-						connector := graph[Key("connector", parts[0])]
-						if connector != nil && connector.Remote != nil && table.Remote.SyncID == p.Remote.ID && table.Remote.ConnectorID == connector.Remote.ID {
-							matches = append(matches, key)
-						}
-					} else if table.Remote.DatabaseID == p.Remote.ID && table.Remote.Name == "public."+parts[1] {
-						matches = append(matches, key)
-					}
-				}
-				if len(matches) != 1 {
-					node.Problems = append(node.Problems, "upstream table must already exist: "+ref.Name)
-				} else {
-					add(matches[0])
-				}
 			}
 		}
 		if row.Type == "sync" {

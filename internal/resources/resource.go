@@ -46,6 +46,9 @@ func SyncBaseName(name string) string {
 	return name
 }
 func ValidateResourceName(kind, name string) error {
+	if (kind == "connector" && name == "_upload") || (kind == "sync" && strings.HasPrefix(name, "_upload/")) {
+		return fmt.Errorf("_upload is reserved for uploaded tables")
+	}
 	if kind != "sync" {
 		return ValidateName(name)
 	}

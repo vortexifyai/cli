@@ -200,7 +200,9 @@ func newJobCommand(opts *options, logs bool) *cobra.Command {
 			if len(seen) > 100 {
 				return fmt.Errorf("too many related jobs; inspect child jobs directly")
 			}
-			collected = append(collected, api.Execution{"job_id": id, "logs": row["logs"]})
+			collected = append(collected, api.Execution{"job_id": id, "logs": row["logs"],
+				"logs_error": row["logs_error"], "failure_message": row["failure_message"],
+				"failure_reason_code": row["failure_reason_code"], "error": row["error"]})
 			ids := []string{}
 			for _, key := range []string{"build_job_id", "shell_build_job_id", "dependency_job_id"} {
 				if child, ok := row[key].(string); ok && child != "" {
@@ -238,7 +240,18 @@ func newJobCommand(opts *options, logs bool) *cobra.Command {
 		}
 		for _, row := range collected {
 			text, _ := row["logs"].(string)
-			fmt.Fprintf(cmd.OutOrStdout(), "Job %v\n%s\n", row["job_id"], strings.TrimRight(text, "\n"))
+			fmt.Fprintf(cmd.OutOrStdout(), "Job %v\n", row["job_id"])
+			if reason := textValue(row["logs_error"]); reason != "" {
+				cause := textValue(row["failure_message"])
+				if cause == "" {
+					cause = textValue(row["error"])
+				}
+				if cause != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "Failure: %s\n", cause)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Logs unavailable: %s\n", reason)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), strings.TrimRight(text, "\n"))
 		}
 		return nil
 	}}

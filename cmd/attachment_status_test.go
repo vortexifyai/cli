@@ -22,7 +22,7 @@ func TestStatusShowsWorkingAttachments(t *testing.T) {
 	}
 	dir := filepath.Join(root, "agents", "support")
 	os.MkdirAll(dir, 0755)
-	os.WriteFile(filepath.Join(dir, "main.py"), []byte("from vortexify import Agent\nagent = Agent(name='support')\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.py"), []byte("from vortexify import Agent\nagent = Agent()\n"), 0644)
 	local, err := resources.Scan(root, cfg)
 	if err != nil || len(local) != 1 {
 		t.Fatalf("scan %v %v", local, err)

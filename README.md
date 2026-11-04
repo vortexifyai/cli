@@ -315,3 +315,30 @@ vortexify deploy --help
 ```
 
 Commands that support `--json` return structured output for scripts. Use `--org-id` where organization selection would otherwise require a prompt. Inspect `--help` for the flags supported by your installed version.
+
+### Uploaded inputs and recovery
+
+Use `Table("_upload.customers")` in transform/API inputs or agent context after
+`vortexify upload table customers.csv --name customers --wait` succeeds.
+`_upload` is reserved and cannot name a connector. An explicit upload name is
+used exactly or rejected if it already exists; unnamed uploads retain suffixing.
+Committing `Table("erp.customers")` or `DatabaseTable("planning.actions")`
+requires committed producers, but does not require executing them first.
+Execution still requires the referenced data to exist.
+
+`VORTEXIFY_ORG_ID` supplies the default organization; `--org-id` overrides it.
+
+If registration succeeds but starter downloading or verification fails, run
+`vortexify create <type> <name> --resume`. This downloads and verifies the saved
+source without registering another resource. Existing local folders are preserved.
+
+To recover a context conflict, run `vortexify context pull --backup-local`.
+The CLI saves conflicting local files in `.vortexify/backups/*.tar.gz`, then pulls
+the server collection. Extract the backup elsewhere, reconcile your edits, and
+run `vortexify context push`. Ordinary pull continues to refuse conflicting edits.
+
+Database commits report when migration approval is required. An approval is a
+recorded decision, distinct from a successful migration: after a failed migration,
+`vortexify database <name> --approve <version>` submits a new job. Inspect the
+previous job's logs first. Repeating an upload submission for the same upload ID
+reuses active/successful processing; uploading a file again creates a new upload.

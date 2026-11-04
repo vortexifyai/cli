@@ -87,7 +87,7 @@ func States(ctx context.Context, root string, cfg *config.ProjectConfig, c *api.
 }
 
 // Sync runs under the caller's existing workspace lock and recovery journal.
-func Sync(ctx context.Context, root string, cfg *config.ProjectConfig, c *api.Client, push bool, out io.Writer) (int, error) {
+func Sync(ctx context.Context, root string, cfg *config.ProjectConfig, c *api.Client, push bool, out io.Writer, backupLocal ...bool) (int, error) {
 	if out == nil {
 		out = io.Discard
 	}
@@ -180,7 +180,33 @@ func Sync(ctx context.Context, root string, cfg *config.ProjectConfig, c *api.Cl
 				fmt.Fprintf(out, "Kept local changes in %s.\n", name)
 				continue
 			}
-			return count, fmt.Errorf("conflict in %s; files unchanged", name)
+			if len(backupLocal) == 0 || !backupLocal[0] {
+				return count, fmt.Errorf("conflict in %s; files unchanged. Use vortexify context pull --backup-local to save local files and pull the server version", name)
+			}
+			// Copy first; the existing recovery journal atomically installs the remote snapshot.
+			backupRoot, err := resources.SafePath(root, filepath.Join(".vortexify", "backups"))
+			if err != nil {
+				return count, err
+			}
+			if err = os.MkdirAll(backupRoot, 0700); err != nil {
+				return count, err
+			}
+			backup, err := os.CreateTemp(backupRoot, name+"-*.tar.gz")
+			if err != nil {
+				return count, err
+			}
+			backupHash, archiveErr := resources.CreateArchiveWithHash(filepath.Join(root, ".vortexify", name), backup, name)
+			closeErr := backup.Close()
+			if archiveErr != nil {
+				return count, archiveErr
+			}
+			if closeErr != nil {
+				return count, closeErr
+			}
+			if backupHash != hash {
+				return count, fmt.Errorf("%s changed while backing up; files unchanged", name)
+			}
+			fmt.Fprintf(out, "Saved local %s to %s. Reapply your edits after pulling, then run vortexify context push.\n", name, backup.Name())
 		}
 		target, err := resources.SafePath(root, filepath.Join(".vortexify", name))
 		if err != nil {

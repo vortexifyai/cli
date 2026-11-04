@@ -12,7 +12,8 @@ func newContextCommand(opts *options) *cobra.Command {
 	command := &cobra.Command{Use: "context", Short: "Synchronize project context and business knowledge files"}
 	for _, action := range []string{"init", "pull", "push", "status"} {
 		action := action
-		command.AddCommand(&cobra.Command{Use: action, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		var backupLocal bool
+		subcommand := &cobra.Command{Use: action, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			root, cfg, c, err := workspace(opts)
 			if err != nil {
 				return err
@@ -42,11 +43,15 @@ func newContextCommand(opts *options) *cobra.Command {
 					}
 				}
 			}
-			if _, err = projectfiles.Sync(cmd.Context(), root, cfg, c, action == "push", cmd.OutOrStdout()); err != nil {
+			if _, err = projectfiles.Sync(cmd.Context(), root, cfg, c, action == "push", cmd.OutOrStdout(), backupLocal); err != nil {
 				return err
 			}
 			return projectfiles.WriteInstructions(root)
-		}})
+		}}
+		if action == "pull" {
+			subcommand.Flags().BoolVar(&backupLocal, "backup-local", false, "Save conflicting local files to .vortexify/backups before pulling the server version")
+		}
+		command.AddCommand(subcommand)
 	}
 	for _, action := range []string{"read", "versions"} {
 		action := action

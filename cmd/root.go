@@ -28,7 +28,7 @@ func NewRootCommand() *cobra.Command {
 	}
 	root := &cobra.Command{Use: "vortexify", Short: "Synchronize Vortexify project resources", Version: version, SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&opts.apiURL, "api-url", opts.apiURL, "Vortexify API URL")
-	root.PersistentFlags().StringVar(&opts.orgID, "org-id", "", "Explicit organization ID (skips organization selection)")
+	root.PersistentFlags().StringVar(&opts.orgID, "org-id", os.Getenv("VORTEXIFY_ORG_ID"), "Explicit organization ID (skips organization selection)")
 	root.AddCommand(newProjectsCommand(opts), newKnowledgeGraphCommand(opts))
 	root.AddCommand(newCreateCommand(opts), newStatusCommand(opts), newLoginCommand(), newInitCommand(opts), newRegistryCommand(opts), newPullCommand(opts), newCommitCommand(opts), newDevCommand(opts), newRecoverCommand(opts))
 	root.AddCommand(executionCommands(opts)...)
