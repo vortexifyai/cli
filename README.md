@@ -111,6 +111,8 @@ Commit your changes before running them. Execution uses saved code, not uncommit
 ```sh
 vortexify run api customer_orders --inputs '{"customer_id":"123"}' --wait
 vortexify run transform orders --wait
+# Run the deployed transform against production inputs and origin databases:
+vortexify run transform orders --production --wait
 vortexify run sync shop/customers --wait
 vortexify test transform orders --wait
 vortexify test api customer_orders --wait
@@ -133,6 +135,8 @@ To rebuild affected downstream previews:
 ```sh
 vortexify run transform orders --rebuild-downstream --wait
 ```
+
+App `--build-memory` accepts 1–8192 MiB and saves the setting for subsequent builds. App deployment completes once both sites have been built and their CloudFront/DNS publications accepted; the URL may take a few minutes to become ready.
 
 Preview work does not deploy resources or trigger production schedules. Use `status` to see whether previews are current or need rebuilding.
 
@@ -167,7 +171,7 @@ Inside an app directory, `vortexify dev` can select that app automatically. Use 
 ```sh
 vortexify build api customer_orders --wait
 vortexify build app dashboard --wait
-vortexify deploy app dashboard --wait
+vortexify deploy app dashboard --build-memory 4096 --wait
 ```
 
 Build prepares a resource for use; deploy selects a saved version for production. To pin a version or upgrade an existing deployment:
@@ -266,6 +270,8 @@ End a query with `;`, or enter `\g` on its own line to submit. `\q` exits and `\
 vortexify commit --type database --resource operations_db
 vortexify database operations_db
 vortexify database operations_db --approve 2
+# Provision a missing preview and apply its saved schema:
+vortexify database operations_db --migrate 2 --environment preview
 vortexify database operations_db --reject 2
 ```
 

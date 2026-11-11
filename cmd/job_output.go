@@ -94,6 +94,11 @@ func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
 	if deployment, ok := result["deployment"].(map[string]any); ok && result["url"] == nil && deployment["domain"] != nil {
 		fmt.Fprintf(out, "URL: https://%v/\n", deployment["domain"])
 	}
+	if deployment, ok := result["deployment"].(map[string]any); ok {
+		if message := textValue(deployment["message"]); message != "" {
+			fmt.Fprintln(out, message)
+		}
+	}
 	for _, step := range objectList(result["steps"]) {
 		mark := "…"
 		if step["status"] == "success" {

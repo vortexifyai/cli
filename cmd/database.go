@@ -8,13 +8,16 @@ import (
 )
 
 func newDatabaseCommand(opts *options) *cobra.Command {
-	var approve, reject int
+	var approve, reject, migrate int
 	var environment string
 	var asJSON bool
 	command := &cobra.Command{Use: "database <name-or-id>", Short: "Inspect database migrations and backup jobs, or approve/reject a saved version", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		deciding := cmd.Flags().Changed("approve") || cmd.Flags().Changed("reject")
 		if environment != "origin" && environment != "preview" {
 			return fmt.Errorf("environment must be origin or preview")
+		}
+		if cmd.Flags().Changed("migrate") && migrate <= 0 {
+			return fmt.Errorf("select a positive saved version")
 		}
 		if deciding && approve <= 0 && reject <= 0 {
 			return fmt.Errorf("select a positive saved version")
@@ -40,6 +43,17 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 			return fmt.Errorf("database is not registered; commit it first")
 		}
 		out := cmd.OutOrStdout()
+		if cmd.Flags().Changed("migrate") {
+			result, err := client.MigrateDatabase(cmd.Context(), cfg.ProjectID, id, migrate, environment)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				return json.NewEncoder(out).Encode(result)
+			}
+			fmt.Fprintf(out, "Migration submitted for %s version %d (%s).\n", args[0], migrate, environment)
+			return json.NewEncoder(out).Encode(result)
+		}
 		if deciding {
 			version := reject
 			if approve > 0 {
@@ -70,6 +84,13 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 			return json.NewEncoder(out).Encode(status)
 		}
 		fmt.Fprintf(out, "%s\n  ID: %s\n  Version: %d\n  Migration approval required: %t\n", status.Name, status.ID, status.Version, status.ApprovalRequired)
+		for _, env := range status.Environments {
+			if env.Version > 0 {
+				fmt.Fprintf(out, "  Environment: %s (schema version %d)\n", env.Environment, env.Version)
+			} else {
+				fmt.Fprintf(out, "  Environment: %s (schema not migrated)\n", env.Environment)
+			}
+		}
 		if len(status.Pending) == 0 {
 			fmt.Fprintln(out, "  Pending approvals: none")
 		}
@@ -94,7 +115,8 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 	}}
 	command.Flags().IntVar(&approve, "approve", 0, "Approve and apply a saved database version")
 	command.Flags().IntVar(&reject, "reject", 0, "Reject a saved database version without applying it")
-	command.MarkFlagsMutuallyExclusive("approve", "reject")
+	command.Flags().IntVar(&migrate, "migrate", 0, "Apply a saved schema version; provisions preview when missing")
+	command.MarkFlagsMutuallyExclusive("approve", "reject", "migrate")
 	command.Flags().StringVar(&environment, "environment", "origin", "Target environment for an approval decision")
 	command.Flags().BoolVar(&asJSON, "json", false, "Print structured database status or decision")
 	return command

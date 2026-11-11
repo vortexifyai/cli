@@ -20,18 +20,19 @@ type FileStatus struct {
 }
 
 type Registered struct {
-	SourceType  string      `json:"source_type"`
-	Files       *FileStatus `json:"files,omitempty"`
-	ID          string      `json:"id"`
-	Type        string      `json:"type"`
-	Name        string      `json:"name"`
-	Version     int         `json:"version"`
-	CodeHash    string      `json:"code_hash"`
-	HasCode     bool        `json:"has_code"`
-	UpstreamIDs []string    `json:"upstream_ids"`
-	ConnectorID string      `json:"connector_id"`
-	SyncID      string      `json:"sync_id"`
-	DatabaseID  string      `json:"database_id"`
+	DeploymentStatus string      `json:"deployment_status"`
+	SourceType       string      `json:"source_type"`
+	Files            *FileStatus `json:"files,omitempty"`
+	ID               string      `json:"id"`
+	Type             string      `json:"type"`
+	Name             string      `json:"name"`
+	Version          int         `json:"version"`
+	CodeHash         string      `json:"code_hash"`
+	HasCode          bool        `json:"has_code"`
+	UpstreamIDs      []string    `json:"upstream_ids"`
+	ConnectorID      string      `json:"connector_id"`
+	SyncID           string      `json:"sync_id"`
+	DatabaseID       string      `json:"database_id"`
 }
 
 func Key(kind, name string) string { return kind + ":" + name }

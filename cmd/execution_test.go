@@ -170,3 +170,63 @@ func TestAppDeploymentSubdomain(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestProductionTransformRunSendsExplicitEnvironment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	config.Save(".", config.Default("project", "demo", ""))
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/artifacts/resources/list_resources":
+			json.NewEncoder(w).Encode([]resources.Registered{{ID: "transform", Type: "transform", Name: "orders", Version: 3}})
+		case "/api/v2/execution/jobs/start_resource_job":
+			json.NewDecoder(r.Body).Decode(&received)
+			json.NewEncoder(w).Encode(map[string]any{"job_id": "job", "status": "pending"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if out, err := run(t, "--api-url", server.URL, "--org-id", "org", "run", "transform", "orders", "--production"); err != nil {
+		t.Fatal(out, err)
+	}
+	if received["production"] != true || received["action"] != "run" {
+		t.Fatal(received)
+	}
+}
+
+func TestAppDeploymentBuildMemoryUsesExistingSetting(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	config.Save(".", config.Default("project", "demo", ""))
+	memory := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/artifacts/resources/list_resources":
+			json.NewEncoder(w).Encode([]resources.Registered{{ID: "app", Type: "app", Name: "dashboard", Version: 3}})
+		case "/api/v2/artifacts/apps/set_build_memory":
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["memory_mib"] != float64(8192) || body["app_id"] != "app" {
+				t.Error(body)
+			}
+			memory = true
+			w.Write([]byte(`{}`))
+		case "/api/v2/execution/jobs/deploy_resource":
+			if !memory {
+				t.Error("deployment started before setting memory")
+			}
+			w.Write([]byte(`{"status":"pending","job_id":"job"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if out, err := run(t, "--api-url", server.URL, "--org-id", "org", "deploy", "app", "dashboard", "--build-memory", "8192"); err != nil {
+		t.Fatal(out, err)
+	}
+	if !memory {
+		t.Fatal("memory setting was not applied")
+	}
+}

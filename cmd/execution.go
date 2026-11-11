@@ -19,11 +19,17 @@ func executionCommands(opts *options) []*cobra.Command {
 	return result
 }
 func newExecutionCommand(opts *options, action string) *cobra.Command {
-	var version int
+	var version, buildMemory int
 	var inputsFile, inlineInputs, subdomain string
-	var wait, asJSON, downstream, preview bool
+	var wait, asJSON, downstream, preview, production bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: action + " <type> <name-or-id>", Short: executionDescription(action), Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
+		if production && (args[0] != "transform" || preview || downstream) {
+			return fmt.Errorf("--production requires a transform run without --preview or --rebuild-downstream")
+		}
+		if cmd.Flags().Changed("build-memory") && (args[0] != "app" || buildMemory < 1 || buildMemory > 8192) {
+			return fmt.Errorf("--build-memory requires an app and a value from 1 to 8192 MiB")
+		}
 		if preview && (args[0] != "sync" || downstream || cmd.Flags().Changed("inputs") || cmd.Flags().Changed("inputs-file")) {
 			return fmt.Errorf("--preview requires a sync and cannot be combined with runtime inputs or --rebuild-downstream")
 		}
@@ -63,7 +69,11 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 		if id == "" {
 			return fmt.Errorf("resource is not registered; create and commit it first")
 		}
+
 		values := map[string]any{"action": action, "resource_type": args[0], "resource_id": id}
+		if production {
+			values["production"] = true
+		}
 		if preview {
 			values["action"] = "preview"
 		}
@@ -94,6 +104,12 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 		}
 		if downstream {
 			values["rebuild_downstream"] = true
+		}
+		if cmd.Flags().Changed("build-memory") {
+			if _, err := client.Service(cmd.Context(), "artifacts/apps/set_build_memory", cfg.ProjectID,
+				map[string]any{"app_id": id, "memory_mib": buildMemory}); err != nil {
+				return err
+			}
 		}
 		var result api.Execution
 		if action == "deploy" || action == "upgrade" || action == "undeploy" {
@@ -128,7 +144,11 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 	if action == "deploy" || action == "upgrade" {
 		command.Flags().StringVar(&subdomain, "subdomain", "", "App hostname label, e.g. orders for orders.vortexify.dev on the dev stack")
 	}
+	if action == "build" || action == "deploy" || action == "upgrade" {
+		command.Flags().IntVar(&buildMemory, "build-memory", 0, "App build memory in MiB (1–8192); saves the setting for subsequent builds")
+	}
 	if action == "run" {
+		command.Flags().BoolVar(&production, "production", false, "Run the deployed transform against production inputs and origin databases")
 		command.Flags().BoolVar(&preview, "preview", false, "Sample a sync and estimate row size without publishing data or advancing checkpoints")
 		command.Flags().StringVar(&inlineInputs, "inputs", "", "Inline JSON object containing runtime inputs")
 		command.Flags().StringVar(&inputsFile, "inputs-file", "", "Runtime inputs JSON file, or - to read stdin")
@@ -142,7 +162,7 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 func executionDescription(action string) string {
 	switch action {
 	case "run":
-		return "Run committed code in preview; schedules do not apply"
+		return "Run committed code in preview, or a deployed transform with --production"
 	case "test":
 		return "Run SDK tests against a committed API or transform"
 	case "build":

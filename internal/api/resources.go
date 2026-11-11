@@ -155,7 +155,7 @@ func CodeResources(rows []resources.Registered) []Resource {
 		if r.Type == "table" || r.Type == "secret" {
 			continue
 		}
-		result = append(result, Resource{ID: r.ID, Type: r.Type, Name: r.Name, Version: r.Version, CodeHash: r.CodeHash, HasCode: r.HasCode, ConnectorID: r.ConnectorID, Files: r.Files})
+		result = append(result, Resource{ID: r.ID, Type: r.Type, Name: r.Name, Version: r.Version, CodeHash: r.CodeHash, HasCode: r.HasCode, ConnectorID: r.ConnectorID, Files: r.Files, DeploymentStatus: r.DeploymentStatus})
 	}
 	return result
 }

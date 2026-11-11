@@ -18,7 +18,12 @@ type DatabaseBackupJob struct {
 	Environment string `json:"environment"`
 	Version     int    `json:"resource_version"`
 }
+type DatabaseEnvironment struct {
+	Environment string `json:"environment"`
+	Version     int    `json:"version"`
+}
 type DatabaseStatus struct {
+	Environments     []DatabaseEnvironment      `json:"environments"`
 	ID               string                     `json:"id"`
 	Name             string                     `json:"name"`
 	Version          int                        `json:"version"`
@@ -74,12 +79,14 @@ func (c *Client) GetDatabaseStatus(ctx context.Context, projectID, databaseID st
 		return nil, err
 	}
 	operations, err := decode[struct {
-		LatestBackupJobs []DatabaseBackupJob `json:"latest_backup_jobs"`
+		LatestBackupJobs []DatabaseBackupJob   `json:"latest_backup_jobs"`
+		Environments     []DatabaseEnvironment `json:"environments"`
 	}](response)
 	if err != nil {
 		return nil, err
 	}
 	status.LatestBackups = operations.LatestBackupJobs
+	status.Environments = operations.Environments
 	return status, nil
 }
 
@@ -95,4 +102,18 @@ func (c *Client) DecideDatabaseMigration(ctx context.Context, projectID, databas
 		return nil, err
 	}
 	return decode[DatabaseDecision](response)
+}
+
+func (c *Client) MigrateDatabase(ctx context.Context, projectID, databaseID string, version int, environment string) (any, error) {
+	response, err := c.Service(ctx, "data/databases/migrate_schema", projectID, map[string]any{
+		"database_id": databaseID, "version": version, "environment": environment,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result, err := decode[any](response)
+	if err != nil {
+		return nil, err
+	}
+	return *result, nil
 }

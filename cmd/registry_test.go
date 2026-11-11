@@ -23,7 +23,7 @@ func TestRegistryEnvironmentDetailsAreScopedAndDoNotStartJobs(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/api/v2/artifacts/resources/get_resource_graph":
-			w.Write([]byte(`[{"id":"function","type":"api","name":"notes","version":2},{"id":"app","type":"app","name":"demo","version":1}]`))
+			w.Write([]byte(`[{"id":"function","type":"api","name":"notes","version":2,"deployment_status":"v2"},{"id":"app","type":"app","name":"demo","version":1}]`))
 		case "/api/v2/artifacts/functions/get_function_environment":
 			lookups++
 			if body["org_id"] != "org" || body["project_id"] != "project" || body["function_id"] != "function" || body["version"] != float64(2) {
