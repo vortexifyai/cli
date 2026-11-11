@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"time"
 
 	"vortexify-cli/internal/config"
 )
@@ -43,8 +45,12 @@ func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	return *rows, nil
 }
 
-func (c *Client) SearchProjects(ctx context.Context, query string) (map[string]any, error) {
-	resp, err := c.Service(ctx, "platform/projects/search_projects", "", map[string]any{"query": query})
+func (c *Client) SearchProjects(ctx context.Context, query string, conversationID ...string) (map[string]any, error) {
+	values := map[string]any{"query": query}
+	if len(conversationID) > 0 && conversationID[0] != "" {
+		values["conversation_id"] = conversationID[0]
+	}
+	resp, err := c.DiscoveryService(ctx, "platform/projects/search_projects", "", values)
 	if err != nil {
 		return nil, err
 	}
@@ -112,4 +118,18 @@ func (c *Client) SetKnowledgeGraph(ctx context.Context, projectID string, enable
 		return err
 	}
 	return resp.Body.Close()
+}
+
+// Investigations may make several model/tool calls; other API requests retain their normal timeout.
+func (c *Client) DiscoveryService(ctx context.Context, endpoint, projectID string, values map[string]any) (*http.Response, error) {
+	scoped := *c
+	httpClient := *c.HTTPClient
+	httpClient.Timeout = 10 * time.Minute
+	if transport, ok := httpClient.Transport.(*http.Transport); ok {
+		cloned := transport.Clone()
+		cloned.ResponseHeaderTimeout = 10 * time.Minute
+		httpClient.Transport = cloned
+	}
+	scoped.HTTPClient = &httpClient
+	return scoped.Service(ctx, endpoint, projectID, values)
 }

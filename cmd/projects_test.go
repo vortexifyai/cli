@@ -296,3 +296,39 @@ func TestOrganizationEnvironmentDefaultAndFlagOverride(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoveryConversationContinuation(t *testing.T) {
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	var payloads []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var payload map[string]any
+		json.NewDecoder(req.Body).Decode(&payload)
+		payloads = append(payloads, payload)
+		if payload["org_id"] != "org" {
+			t.Error("missing organization scope", payload)
+		}
+		switch req.URL.Path {
+		case "/api/v2/platform/projects/search_projects":
+			json.NewEncoder(w).Encode(map[string]any{"conversation_id": "saved-search", "answer": "Use the inventory app.", "projects": []any{}, "apps": []map[string]any{{"id": "app", "name": "Inventory", "deployment_status": "active"}}})
+		default:
+			t.Error("unexpected endpoint", req.URL.Path)
+		}
+	}))
+	defer server.Close()
+	base := []string{"--api-url", server.URL, "--org-id", "org"}
+	for _, args := range [][]string{{"projects", "search", "inventory"}, {"projects", "search", "Which is deployed?", "--conversation", "saved-search"}} {
+		out, prompts, err := runOrganizationCommand("", append(base, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if args[1] == "search" && (!strings.Contains(out, "Inventory") || !strings.Contains(prompts, "--conversation saved-search")) {
+			t.Fatal(out, prompts)
+		}
+	}
+	if _, ok := payloads[0]["conversation_id"]; ok {
+		t.Fatal("new searches inherit a conversation")
+	}
+	if len(payloads) != 2 || payloads[1]["conversation_id"] != "saved-search" {
+		t.Fatal(payloads)
+	}
+}

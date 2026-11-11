@@ -62,6 +62,7 @@ func selectOrganization(cmd *cobra.Command, client *api.Client, explicit string)
 
 func newProjectsCommand(opts *options) *cobra.Command {
 	var asJSON bool
+	var conversationID string
 	list := func(cmd *cobra.Command, args []string) error {
 		client := api.NewClient(opts.apiURL)
 		if err := selectOrganization(cmd, client, opts.orgID); err != nil {
@@ -79,7 +80,7 @@ func newProjectsCommand(opts *options) *cobra.Command {
 	command := &cobra.Command{Use: "projects", Short: "List or search projects in a selected organization", Args: cobra.NoArgs, RunE: list}
 	command.PersistentFlags().BoolVar(&asJSON, "json", false, "Print structured JSON")
 	command.AddCommand(&cobra.Command{Use: "list", Short: "List projects in a selected organization", Args: cobra.NoArgs, RunE: list})
-	command.AddCommand(&cobra.Command{Use: "search <query>", Short: "Search projects in a selected organization", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	search := &cobra.Command{Use: "search <query>", Short: "Search projects in a selected organization", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		query := strings.TrimSpace(strings.Join(args, " "))
 		if query == "" {
 			return fmt.Errorf("search query must not be empty")
@@ -88,7 +89,7 @@ func newProjectsCommand(opts *options) *cobra.Command {
 		if err := selectOrganization(cmd, client, opts.orgID); err != nil {
 			return err
 		}
-		result, err := client.SearchProjects(cmd.Context(), query)
+		result, err := client.SearchProjects(cmd.Context(), query, conversationID)
 		if err != nil {
 			return err
 		}
@@ -108,8 +109,26 @@ func newProjectsCommand(opts *options) *cobra.Command {
 		if err := json.Unmarshal(data, &projects); err != nil {
 			return err
 		}
-		return printProjects(cmd, projects)
-	}})
+		apps, _ := result["apps"].([]any)
+		if len(projects) > 0 || len(apps) == 0 {
+			if err := printProjects(cmd, projects); err != nil {
+				return err
+			}
+		}
+		if len(apps) > 0 {
+			for _, value := range apps {
+				if app, ok := value.(map[string]any); ok {
+					fmt.Fprintf(cmd.OutOrStdout(), "App: %v (%v) — %v\n", app["name"], app["id"], app["deployment_status"])
+				}
+			}
+		}
+		if id, ok := result["conversation_id"].(string); ok && id != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Search conversation: %s\nContinue with --conversation %s\n", id, id)
+		}
+		return nil
+	}}
+	search.Flags().StringVar(&conversationID, "conversation", "", "Continue a saved search conversation; omit to start a new search")
+	command.AddCommand(search)
 	return command
 }
 

@@ -121,15 +121,24 @@ func previewTemplate(cmd *cobra.Command, client *api.Client, projectID, id strin
 func newBlueprintsCommand(opts *options) *cobra.Command {
 	run := func(action string) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
-			_, cfg, client, err := workspace(opts)
-			if err != nil {
-				return err
-			}
-			if err := client.ProjectOrg(cmd.Context(), cfg.ProjectID); err != nil {
-				return err
+			client := api.NewClient(opts.apiURL)
+			projectID := ""
+			if action == "search" {
+				if err := selectOrganization(cmd, client, opts.orgID); err != nil {
+					return err
+				}
+			} else {
+				_, cfg, scoped, err := workspace(opts)
+				if err != nil {
+					return err
+				}
+				client, projectID = scoped, cfg.ProjectID
+				if err := client.ProjectOrg(cmd.Context(), projectID); err != nil {
+					return err
+				}
 			}
 			if action == "preview" {
-				return previewTemplate(cmd, client, cfg.ProjectID, args[0])
+				return previewTemplate(cmd, client, projectID, args[0])
 			}
 			values := map[string]any{}
 			endpoint := "attached"
@@ -137,12 +146,17 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 			case "search":
 				endpoint = "search"
 				values["query"] = strings.Join(args, " ")
+				values["include_answer"] = true
+				conversationID, _ := cmd.Flags().GetString("conversation")
+				if conversationID != "" {
+					values["conversation_id"] = conversationID
+				}
 				limit, _ := cmd.Flags().GetInt("limit")
 				if limit < 1 || limit > 20 {
 					return fmt.Errorf("limit must be from 1 to 20")
 				}
 				values["limit"] = limit
-				for _, flag := range []string{"industry", "solution-type", "use-case"} {
+				for _, flag := range []string{"industry", "solution-type", "use-case", "category", "subcategory", "module", "subindustry"} {
 					value, _ := cmd.Flags().GetString(flag)
 					if value != "" {
 						values[strings.ReplaceAll(flag, "-", "_")] = value
@@ -162,7 +176,11 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 				values["template_id"] = args[0]
 				values["attached"] = action == "attach"
 			}
-			response, err := client.Service(cmd.Context(), "artifacts/templates/"+endpoint, cfg.ProjectID, values)
+			service := client.Service
+			if action == "search" {
+				service = client.DiscoveryService
+			}
+			response, err := service(cmd.Context(), "artifacts/templates/"+endpoint, projectID, values)
 			if err != nil {
 				return err
 			}
@@ -212,6 +230,10 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 	cmd := &cobra.Command{Use: "blueprints", Short: "Search blueprints and manage project attachments", Args: cobra.NoArgs, RunE: run("attached")}
 	cmd.AddCommand(&cobra.Command{Use: "list", Short: "List attached project blueprints", Args: cobra.NoArgs, RunE: run("attached")})
 	search := &cobra.Command{Use: "search <query>", Short: "Search the full blueprint catalog", Args: cobra.MinimumNArgs(1), RunE: run("search")}
+	search.Flags().String("conversation", "", "Continue a saved search conversation; omit to start a new search")
+	for _, flag := range []string{"category", "subcategory", "module", "subindustry"} {
+		search.Flags().String(flag, "", "Filter by "+flag)
+	}
 	search.Flags().Int("limit", 10, "Maximum matching blueprints (1–20)")
 	search.Flags().String("industry", "", "Filter by industry")
 	search.Flags().String("solution-type", "", "Filter by solution type")

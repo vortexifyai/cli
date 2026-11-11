@@ -21,11 +21,14 @@ func executionCommands(opts *options) []*cobra.Command {
 func newExecutionCommand(opts *options, action string) *cobra.Command {
 	var version, buildMemory int
 	var inputsFile, inlineInputs, subdomain string
-	var wait, asJSON, downstream, preview, production bool
+	var wait, asJSON, downstream, preview, production, deployRun bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: action + " <type> <name-or-id>", Short: executionDescription(action), Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
-		if production && (args[0] != "transform" || preview || downstream) {
-			return fmt.Errorf("--production requires a transform run without --preview or --rebuild-downstream")
+		if production && ((args[0] != "transform" && args[0] != "sync") || preview || downstream) {
+			return fmt.Errorf("--production requires a sync or transform run without --preview or --rebuild-downstream")
+		}
+		if deployRun && args[0] != "sync" && args[0] != "transform" {
+			return fmt.Errorf("--run requires a sync or transform deployment")
 		}
 		if cmd.Flags().Changed("build-memory") && (args[0] != "app" || buildMemory < 1 || buildMemory > 8192) {
 			return fmt.Errorf("--build-memory requires an app and a value from 1 to 8192 MiB")
@@ -71,6 +74,9 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 		}
 
 		values := map[string]any{"action": action, "resource_type": args[0], "resource_id": id}
+		if deployRun {
+			values["run"] = true
+		}
 		if production {
 			values["production"] = true
 		}
@@ -139,17 +145,20 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 	command.Flags().BoolVar(&asJSON, "json", false, "Print structured JSON")
 	command.Flags().DurationVar(&timeout, "timeout", 30*time.Minute, "Maximum polling duration; does not cancel jobs")
 	if action != "upgrade" && action != "undeploy" {
-		command.Flags().IntVar(&version, "version", 0, "Committed source version (defaults to latest)")
+		command.Flags().IntVar(&version, "version", 0, "Committed version (production defaults to deployed; development/deploy to latest)")
 	}
 	if action == "deploy" || action == "upgrade" {
+		command.Flags().BoolVar(&deployRun, "run", false, "Run the sync or transform in production and activate after output publication")
 		command.Flags().StringVar(&subdomain, "subdomain", "", "App hostname label, e.g. orders for orders.vortexify.dev on the dev stack")
 	}
 	if action == "build" || action == "deploy" || action == "upgrade" {
 		command.Flags().IntVar(&buildMemory, "build-memory", 0, "App build memory in MiB (1–8192); saves the setting for subsequent builds")
 	}
 	if action == "run" {
-		command.Flags().BoolVar(&production, "production", false, "Run the deployed transform against production inputs and origin databases")
+		command.Flags().BoolVar(&production, "production", false, "Run the deployed sync or transform against production inputs and origin databases")
 		command.Flags().BoolVar(&preview, "preview", false, "Sample a sync and estimate row size without publishing data or advancing checkpoints")
+	}
+	if action == "run" || action == "deploy" || action == "upgrade" {
 		command.Flags().StringVar(&inlineInputs, "inputs", "", "Inline JSON object containing runtime inputs")
 		command.Flags().StringVar(&inputsFile, "inputs-file", "", "Runtime inputs JSON file, or - to read stdin")
 		command.MarkFlagsMutuallyExclusive("inputs", "inputs-file")
@@ -162,13 +171,13 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 func executionDescription(action string) string {
 	switch action {
 	case "run":
-		return "Run committed code in preview, or a deployed transform with --production"
+		return "Run committed code in preview, or a deployed sync/transform with --production"
 	case "test":
 		return "Run SDK tests against a committed API or transform"
 	case "build":
 		return "Build an app artifact or prepare a function preview runtime"
 	case "deploy":
-		return "Deploy the latest committed version or select one with --version"
+		return "Deploy a committed version; --run executes syncs/transforms before activation"
 	case "upgrade":
 		return "Deploy the latest committed version, pinned when requested"
 	default:

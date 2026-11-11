@@ -68,6 +68,7 @@ To work with an existing project:
 ```sh
 vortexify projects list
 vortexify projects search "operations"
+vortexify projects search "Which one is deployed?" --conversation <conversation-id>
 vortexify init operations --project-id PROJECT_ID
 cd operations
 vortexify pull
@@ -297,7 +298,13 @@ vortexify blueprints list
 vortexify blueprints read dashboard
 ```
 
-`search` searches the catalog; `list` shows blueprints attached to your project.
+`search` starts a new blueprint discovery conversation; the assistant can refine searches and read design documentation or code. Responses can include `recommended_parts` with a part ID, title and explanation of why that section is useful. `list` shows blueprints attached to your project. Continue refining a search explicitly:
+
+```sh
+vortexify blueprints search "How does that roster section work?" --conversation <conversation-id>
+```
+
+Project discovery similarly investigates accessible projects, apps, committed documents and resource code. Both searches return a `conversation_id`; omit `--conversation` to start fresh. Saved conversations are private to your account and organization; browse previous conversations in the app UI. Blueprint filters (`--industry`, `--subindustry`, `--category`, `--subcategory`, `--module`) are retained for the conversation.
 
 ## Install coding-agent skills
 
@@ -348,3 +355,11 @@ recorded decision, distinct from a successful migration: after a failed migratio
 `vortexify database <name> --approve <version>` submits a new job. Inspect the
 previous job's logs first. Repeating an upload submission for the same upload ID
 reuses active/successful processing; uploading a file again creates a new upload.
+
+### Deploy and run syncs and transforms
+
+`vx deploy sync erp/orders --run --wait` and `vx deploy transform order_readiness --run --wait` execute the selected committed version against production inputs, then activate it after output publication succeeds. Add `--version N` to select a version; `vx upgrade ... --run` selects the latest committed version. Without `--run`, deployment only selects the version.
+
+Development and production outputs and sync checkpoints are separate for each committed version. Deployment never copies preview output or checkpoints. A new incremental sync version starts without a production checkpoint and must support that initial state. Existing production state for the same version is retained.
+
+Use `vx run sync erp/orders --production` or `vx run transform order_readiness --production` for later runs of a deployed version. Production requires a deployed version; ordinary runs use development. Apply required origin database migrations separately before deployment. A failed deployment keeps the previous version selected, but cannot undo writes the run already made to databases or external systems.

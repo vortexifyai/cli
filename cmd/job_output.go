@@ -61,6 +61,18 @@ func objectList(value any) []map[string]any {
 	return result
 }
 func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
+	if !asJSON && result["deployment_run"] == true {
+		fmt.Fprintln(out, "Deployment: production run; activates after successful output publication")
+		if result["deployment_activated"] == true {
+			fmt.Fprintln(out, "Deployment activated")
+		}
+		if result["sync_mode"] != nil {
+			fmt.Fprintf(out, "Sync mode: %v\n", result["sync_mode"])
+		}
+		if result["has_production_checkpoint"] == false {
+			fmt.Fprintln(out, "Checkpoint: none — first production run of this version")
+		}
+	}
 	if asJSON {
 		return json.NewEncoder(out).Encode(result)
 	}

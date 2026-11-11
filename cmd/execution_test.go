@@ -230,3 +230,56 @@ func TestAppDeploymentBuildMemoryUsesExistingSetting(t *testing.T) {
 		t.Fatal("memory setting was not applied")
 	}
 }
+
+func TestDeployRunAndProductionSyncFlags(t *testing.T) {
+	for _, deployment := range []bool{true, false} {
+		t.Run(map[bool]string{true: "deploy-run", false: "production-sync"}[deployment], func(t *testing.T) {
+			root := t.TempDir()
+			t.Chdir(root)
+			t.Setenv("VORTEXIFY_TOKEN", "token")
+			if err := config.Save(root, config.Default("project", "demo", "")); err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v2/artifacts/resources/list_resources":
+					json.NewEncoder(w).Encode([]resources.Registered{{ID: "connector", Type: "connector", Name: "erp", Version: 1}, {ID: "sync", Type: "sync", ConnectorID: "connector", Name: "orders", Version: 4}})
+				case "/api/v2/execution/jobs/deploy_resource", "/api/v2/execution/jobs/start_resource_job":
+					calls++
+					var body map[string]any
+					json.NewDecoder(r.Body).Decode(&body)
+					if deployment {
+						if body["run"] != true || body["action"] != "deploy" || body["version"] != float64(4) {
+							t.Error(body)
+						}
+					} else if body["production"] != true || body["action"] != "run" {
+						t.Error(body)
+					}
+					json.NewEncoder(w).Encode(map[string]any{"job_id": "job", "status": "pending", "completed": false})
+				default:
+					t.Error(r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			args := []string{"--api-url", server.URL, "--org-id", "org"}
+			if deployment {
+				args = append(args, "deploy", "sync", "erp/orders", "--run", "--version", "4")
+			} else {
+				args = append(args, "run", "sync", "erp/orders", "--production")
+			}
+			if output, err := run(t, args...); err != nil {
+				t.Fatal(output, err)
+			}
+			if calls != 1 {
+				t.Fatal("expected one submission", calls)
+			}
+		})
+	}
+}
+func TestDeployRunRejectsAppsBeforeRequests(t *testing.T) {
+	if output, err := run(t, "deploy", "app", "orders", "--run"); err == nil || !strings.Contains(err.Error(), "sync or transform") {
+		t.Fatal(output, err)
+	}
+}
