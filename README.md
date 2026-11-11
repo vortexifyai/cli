@@ -2,6 +2,19 @@
 
 Build and manage Vortexify projects from your terminal. Create resources, synchronize code, run data workflows, develop React apps, and deploy saved versions.
 
+## Changelog
+
+### v0.1.5
+
+- Add `deploy sync/transform --run` and `upgrade sync/transform --run` to execute in production and activate the selected version after successful output publication. Accept runtime inputs with `--inputs` or `--inputs-file` on deploy and upgrade.
+- Support `run sync --production` alongside production transform runs. Production runs default to the deployed version; ordinary development runs default to the latest committed version.
+- Report deployment activation, sync mode and a missing production checkpoint for deployment runs. With the updated server/runtime, development and production table outputs and sync checkpoints are separate per committed version; deployment does not copy preview data or checkpoints.
+- Add conversational project/app and blueprint discovery. Refine a search with `--conversation <id>`; omit the flag to start fresh. Browse saved searches in the app UI.
+- Allow organization-scoped blueprint searches without a project workspace, with category, subcategory, module and subindustry filters. Return specific blueprint part recommendations with reasons and citations.
+- Allow longer discovery requests when the assistant needs multiple tool calls.
+
+These features require the corresponding API changes. Production output/checkpoint isolation also requires the matching watcher and runtime updates; the CLI release alone does not change stored data or execution behavior.
+
 ## Installation
 
 Download the installer for your computer:
