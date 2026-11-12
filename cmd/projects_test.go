@@ -259,7 +259,7 @@ func TestKnowledgeGraphEnableShowsCapacityAndRequiresConfirmation(t *testing.T) 
 		t.Fatal(out, prompt, err, enables)
 	}
 	out, prompt, err = runOrganizationCommand("yes\n", base...)
-	if err != nil || enables != 1 || !strings.Contains(prompt, "Transform outputs are excluded") {
+	if err != nil || enables != 1 || !strings.Contains(prompt, "Transform outputs and database tables are excluded") {
 		t.Fatal(out, prompt, err, enables)
 	}
 	available = false

@@ -82,7 +82,7 @@ func TestTablesUsesExistingScopedServicesAndReportsDiscovery(t *testing.T) {
 	for _, table := range tables {
 		found[table.ID] = table
 	}
-	if len(tables) != 5 || found["orders"].Status != "ready" || found["orders"].DiscoveryJobID != "preview" || found["pending"].Status != "schema pending" || found["failed"].Status != "schema failed" || found["old"].Status != "registered; publication unknown" || found["db"].Status != "registered" {
+	if len(tables) != 6 || found["orders"].Status != "ready" || found["orders"].DiscoveryJobID != "preview" || found["pending"].Status != "schema pending" || found["failed"].Status != "schema failed" || found["old"].Status != "registered; publication unknown" || found["db"].Status != "registered" || found["db-preview"].Status != "registered" || found["pending"].KnowledgeGraph.Status != "not_applicable" || found["db-preview"].KnowledgeGraph.Status != "not_applicable" {
 		t.Fatal(tables)
 	}
 	if found["orders"].KnowledgeGraph == nil || found["orders"].KnowledgeGraph.Phase != "primary_keys" || found["orders"].KnowledgeGraph.Relationships["pending"] != 1 || found["orders"].KnowledgeGraph.JobID != "kg-job" {
@@ -163,5 +163,52 @@ func TestTablesDeleteUsesExistingScopedDeleteRoute(t *testing.T) {
 	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "tables", "delete", "sample_orders")
 	if err != nil || !strings.Contains(out, "Deleted uploaded table sample_orders") {
 		t.Fatal(out, err)
+	}
+}
+
+func TestAuthoritativeInventoryIncludesDatabaseEnvironmentsAndExcludesDerivedGraph(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	if err := config.Save(".", config.Default("project", "demo", "")); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v2/data/tables/list_tables" {
+			t.Error("unexpected endpoint", r.URL.Path)
+		}
+		w.Write([]byte(`[
+			{"id":"reviews","name":"reason_reviews","type":"database","environment":"preview","status":"registered"},
+			{"id":"audit","name":"review_audit","type":"database","environment":"preview","status":"registered"},
+			{"id":"tasks","name":"follow_up_tasks","type":"database","environment":"preview","status":"registered"},
+			{"id":"origin","name":"reason_reviews","type":"database","environment":"origin","status":"registered"},
+			{"id":"derived","name":"metrics","type":"transform","status":"ready","knowledge_graph":{"status":"pending"}}
+		]`))
+	}))
+	defer server.Close()
+	base := []string{"--api-url", server.URL, "--org-id", "org", "tables"}
+	out, err := run(t, append(base, "--json")...)
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	var rows []api.TableSummary
+	if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 5 {
+		t.Fatal(out, err)
+	}
+	for _, row := range rows {
+		if row.KnowledgeGraph == nil || row.KnowledgeGraph.Status != "not_applicable" {
+			t.Fatal("excluded table has graph work", row)
+		}
+	}
+	out, err = run(t, base...)
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	for _, name := range []string{"reason_reviews [preview]", "reason_reviews [origin]", "review_audit", "follow_up_tasks", "metrics", "not applicable"} {
+		if !strings.Contains(out, name) {
+			t.Fatalf("missing %q in %s", name, out)
+		}
+	}
+	if strings.Contains(out, "pending") {
+		t.Fatal("excluded tables should never display pending graph work", out)
 	}
 }

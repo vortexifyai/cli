@@ -222,6 +222,9 @@ func (s *Service) Run(ctx context.Context, root string, cfg *config.ProjectConfi
 				}
 				if s.Output != nil {
 					fmt.Fprintf(s.Output, "Committed %s (version %d).\n", key, saved.Version)
+					for _, warning := range saved.Warnings {
+						fmt.Fprintf(s.Output, "Warning: %s\n", warning)
+					}
 					if saved.MigrationStatus == "approval_required" {
 						fmt.Fprintf(s.Output, "Migration approval required: vortexify database %s --approve %d --environment %s\n", saved.Name, saved.Version, saved.MigrationEnvironment)
 					}

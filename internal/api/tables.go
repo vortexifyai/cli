@@ -34,6 +34,7 @@ type TableKnowledgeGraph struct {
 	Relationships      map[string]int `json:"relationships"`
 	WaitingForTableIDs []string       `json:"waiting_for_table_ids"`
 	PendingJobIDs      []string       `json:"pending_job_ids"`
+	WaitingReason      string         `json:"waiting_reason,omitempty"`
 	Error              string         `json:"error,omitempty"`
 	StartedAt          string         `json:"started_at,omitempty"`
 	CompletedAt        string         `json:"completed_at,omitempty"`
@@ -102,8 +103,8 @@ func (c *Client) ListTables(ctx context.Context, projectID string) ([]TableSumma
 	if authoritative {
 		result := []TableSummary{}
 		for _, table := range *tables {
-			if table.Type == "database" && table.Environment != "origin" {
-				continue
+			if table.Type != "sync" && table.Type != "upload" {
+				table.KnowledgeGraph = &TableKnowledgeGraph{TableID: table.ID, Status: "not_applicable", Phase: "not_applicable"}
 			}
 			result = append(result, table)
 		}
@@ -149,9 +150,6 @@ func (c *Client) ListTables(ctx context.Context, projectID string) ([]TableSumma
 	result := []TableSummary{}
 	for _, table := range *tables {
 		if table.Type == "database" {
-			if table.Environment != "origin" {
-				continue
-			}
 			table.Status = "registered"
 		} else {
 			table.Status = "registered; publication unknown"
@@ -199,6 +197,10 @@ func (c *Client) ListTables(ctx context.Context, projectID string) ([]TableSumma
 		byID[table.TableID] = table
 	}
 	for i := range result {
+		if result[i].Type != "sync" && result[i].Type != "upload" {
+			result[i].KnowledgeGraph = &TableKnowledgeGraph{TableID: result[i].ID, Status: "not_applicable", Phase: "not_applicable"}
+			continue
+		}
 		if result[i].KnowledgeGraph != nil {
 			continue
 		}

@@ -1,6 +1,9 @@
 package api
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 type PendingDatabaseMigration struct {
 	Version        int      `json:"version"`
@@ -8,10 +11,36 @@ type PendingDatabaseMigration struct {
 	MigrationPaths []string `json:"migration_paths"`
 }
 type DatabaseMigrationJob struct {
-	ID      string `json:"id"`
-	Status  string `json:"status"`
-	Version int    `json:"resource_version"`
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	Version     int    `json:"resource_version"`
+	Environment string `json:"environment,omitempty"`
+
+	Error string `json:"error,omitempty"`
 }
+
+func (j *DatabaseMigrationJob) UnmarshalJSON(data []byte) error {
+	type job DatabaseMigrationJob
+	var value struct {
+		job
+		Config struct {
+			Environment string `json:"environment"`
+			Error       string `json:"watcher_error"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*j = DatabaseMigrationJob(value.job)
+	if j.Environment == "" {
+		j.Environment = value.Config.Environment
+	}
+	if j.Error == "" {
+		j.Error = value.Config.Error
+	}
+	return nil
+}
+
 type DatabaseBackupJob struct {
 	ID          string `json:"id"`
 	Status      string `json:"status"`
@@ -29,6 +58,7 @@ type DatabaseStatus struct {
 	Version          int                        `json:"version"`
 	ApprovalRequired bool                       `json:"migration_approval_required"`
 	Pending          []PendingDatabaseMigration `json:"pending_migrations"`
+	LatestMigrations []DatabaseMigrationJob     `json:"latest_migrations"`
 	LatestMigration  *DatabaseMigrationJob      `json:"latest_migration,omitempty"`
 	LatestBackups    []DatabaseBackupJob        `json:"latest_backups"`
 }
@@ -69,6 +99,14 @@ func (c *Client) GetDatabaseStatus(ctx context.Context, projectID, databaseID st
 	jobs, err := decode[[]DatabaseMigrationJob](response)
 	if err != nil {
 		return nil, err
+	}
+	// Keep the newest attempt per environment; another environment cannot hide it.
+	seen := map[string]bool{}
+	for _, job := range *jobs {
+		if !seen[job.Environment] {
+			status.LatestMigrations = append(status.LatestMigrations, job)
+			seen[job.Environment] = true
+		}
 	}
 	// The existing jobs endpoint returns creation time descending.
 	if len(*jobs) > 0 {

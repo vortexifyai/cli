@@ -51,8 +51,13 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 			if asJSON {
 				return json.NewEncoder(out).Encode(result)
 			}
-			fmt.Fprintf(out, "Migration submitted for %s version %d (%s).\n", args[0], migrate, environment)
-			return json.NewEncoder(out).Encode(result)
+			if job, ok := result.(map[string]any); ok && job["id"] != nil {
+				fmt.Fprintf(out, "Migration submitted for %s version %d (%s).\n", args[0], migrate, environment)
+				fmt.Fprintf(out, "Migration job: %v\nStatus: %v\n", job["id"], job["status"])
+			} else {
+				fmt.Fprintln(out, "Schema version is already applied.")
+			}
+			return nil
 		}
 		if deciding {
 			version := reject
@@ -83,7 +88,11 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 		if asJSON {
 			return json.NewEncoder(out).Encode(status)
 		}
-		fmt.Fprintf(out, "%s\n  ID: %s\n  Version: %d\n  Migration approval required: %t\n", status.Name, status.ID, status.Version, status.ApprovalRequired)
+		versionLabel := "uncommitted"
+		if status.Version > 0 {
+			versionLabel = fmt.Sprint(status.Version)
+		}
+		fmt.Fprintf(out, "%s\n  ID: %s\n  Version: %s\n  Migration approval required: %t\n", status.Name, status.ID, versionLabel, status.ApprovalRequired)
 		for _, env := range status.Environments {
 			if env.Version > 0 {
 				fmt.Fprintf(out, "  Environment: %s (schema version %d)\n", env.Environment, env.Version)
@@ -97,10 +106,16 @@ func newDatabaseCommand(opts *options) *cobra.Command {
 		for _, migration := range status.Pending {
 			fmt.Fprintf(out, "  Pending approval: version %d (%s)\n    SQL: %s\n", migration.Version, migration.Environment, strings.Join(migration.MigrationPaths, ", "))
 		}
-		if job := status.LatestMigration; job != nil {
-			fmt.Fprintf(out, "  Latest migration: %s (version %d)\n  Migration job: %s\n", job.Status, job.Version, job.ID)
+		for _, job := range status.LatestMigrations {
+			fmt.Fprintf(out, "  Latest migration: %s (version %d, %s)\n  Migration job: %s\n", job.Status, job.Version, job.Environment, job.ID)
+			if job.Error != "" {
+				fmt.Fprintf(out, "  Error: %s\n", job.Error)
+			}
 			if job.Status == "failed" || job.Status == "stopped" {
-				fmt.Fprintf(out, "  To submit a new migration job: vortexify database %s --approve %d\n", args[0], job.Version)
+				fmt.Fprintf(out, "  Logs: vortexify logs %s\n", job.ID)
+				if job.Environment != "" {
+					fmt.Fprintf(out, "  Retry: vortexify database %s --migrate %d --environment %s\n", args[0], job.Version, job.Environment)
+				}
 			}
 		}
 		if len(status.LatestBackups) == 0 {

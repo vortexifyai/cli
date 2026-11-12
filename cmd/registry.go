@@ -54,7 +54,7 @@ func newRegistryCommand(opts *options) *cobra.Command {
 		if err := output.PrintRegistry(cmd.OutOrStdout(), selected); err != nil {
 			return err
 		}
-		if name != "" && len(selected) == 1 && selected[0].Environment != nil {
+		if name != "" && len(selected) == 1 && selected[0].Version > 0 && selected[0].Environment != nil {
 			environment := selected[0].Environment
 			fmt.Fprintf(cmd.OutOrStdout(), "\nEnvironment for committed version %d\n", environment.Version)
 			fmt.Fprintf(cmd.OutOrStdout(), "  Image type: %s\n", environment.ImageKind)

@@ -21,9 +21,12 @@ func executionCommands(opts *options) []*cobra.Command {
 func newExecutionCommand(opts *options, action string) *cobra.Command {
 	var version, buildMemory int
 	var inputsFile, inlineInputs, subdomain string
-	var wait, asJSON, downstream, preview, production, deployRun bool
+	var wait, asJSON, downstream, preview, production, deployRun, responseOnly bool
 	var timeout time.Duration
 	command := &cobra.Command{Use: action + " <type> <name-or-id>", Short: executionDescription(action), Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
+		if responseOnly && args[0] != "api" {
+			return fmt.Errorf("--response-only requires run api")
+		}
 		if production && ((args[0] != "transform" && args[0] != "sync") || preview || downstream) {
 			return fmt.Errorf("--production requires a sync or transform run without --preview or --rebuild-downstream")
 		}
@@ -130,11 +133,14 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 			result["resource_name"] = selectedName
 		}
 		id, _ = result["job_id"].(string)
-		if wait && id != "" {
-			result, err = waitForJobDisplay(cmd, client, cfg.ProjectID, id, timeout, asJSON)
+		if (wait || responseOnly) && id != "" && result["completed"] != true {
+			result, err = waitForJobDisplay(cmd, client, cfg.ProjectID, id, timeout, asJSON || responseOnly)
 			if err != nil {
 				return err
 			}
+		}
+		if responseOnly {
+			return printAPIResponse(cmd.OutOrStdout(), result)
 		}
 		if err = printExecution(cmd.OutOrStdout(), result, asJSON); err != nil {
 			return err
@@ -149,12 +155,14 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 	}
 	if action == "deploy" || action == "upgrade" {
 		command.Flags().BoolVar(&deployRun, "run", false, "Run the sync or transform in production and activate after output publication")
-		command.Flags().StringVar(&subdomain, "subdomain", "", "App hostname label, e.g. orders for orders.vortexify.dev on the dev stack")
+		command.Flags().StringVar(&subdomain, "subdomain", "", "App hostname label, e.g. orders for orders.apps.vortexify.dev (dev) or orders.apps.vortexify.ai (production)")
 	}
 	if action == "build" || action == "deploy" || action == "upgrade" {
 		command.Flags().IntVar(&buildMemory, "build-memory", 0, "App build memory in MiB (1–8192); saves the setting for subsequent builds")
 	}
 	if action == "run" {
+		command.Flags().BoolVar(&responseOnly, "response-only", false, "Print only the API return value as JSON; waits for completion")
+		command.MarkFlagsMutuallyExclusive("json", "response-only")
 		command.Flags().BoolVar(&production, "production", false, "Run the deployed sync or transform against production inputs and origin databases")
 		command.Flags().BoolVar(&preview, "preview", false, "Sample a sync and estimate row size without publishing data or advancing checkpoints")
 	}

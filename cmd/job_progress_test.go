@@ -157,3 +157,16 @@ func TestJobWaitFallsBackWhenStreamingIsUnavailable(t *testing.T) {
 		t.Fatal(result, err, connections.Load())
 	}
 }
+
+func TestAPIOutputOmitsValidationWhileTransformsKeepIt(t *testing.T) {
+	for _, kind := range []string{"function-run", "function-test", "transform-run"} {
+		var out bytes.Buffer
+		result := api.Execution{"type": kind, "status": "success", "completed": true, "validation": map[string]any{"status": "skipped", "reason": "deployed_api"}}
+		if err := printExecution(&out, result, false); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out.String(), "Validation:") != (kind == "transform-run") {
+			t.Fatalf("%s: %s", kind, out.String())
+		}
+	}
+}

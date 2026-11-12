@@ -76,6 +76,7 @@ func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
 	if asJSON {
 		return json.NewEncoder(out).Encode(result)
 	}
+	isAPI := result["type"] == "function-run" || result["type"] == "function-test" || result["type"] == "api-prepare"
 	timings, _ := result["timings"].(map[string]any)
 	for _, field := range []struct{ key, label string }{{"job_id", "Job"}, {"type", "Type"}, {"resource_name", "Resource"}, {"resource_version", "Version"}, {"status", "Status"}, {"analysis_kind", "Analysis"}, {"environment", "Environment"}} {
 		if value := result[field.key]; value != nil {
@@ -176,7 +177,7 @@ func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
 	if reason := textValue(timings["phase_details_unavailable"]); reason != "" {
 		fmt.Fprintln(out, reason)
 	}
-	if value, ok := result["validation"].(map[string]any); ok {
+	if value, ok := result["validation"].(map[string]any); ok && !isAPI {
 		fmt.Fprintf(out, "Validation: %v\n", value["status"])
 	}
 	if result["passed"] != nil {
@@ -241,6 +242,12 @@ func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
 		return enc.Encode(payload["preview"])
 	}
 	if result["type"] == "function-run" {
+		if value, exists := result["response"]; exists {
+			fmt.Fprintln(out, "Result:")
+			enc := json.NewEncoder(out)
+			enc.SetIndent("", "  ")
+			return enc.Encode(value)
+		}
 		var value any = result["result"]
 		for i := 0; i < 4; i++ {
 			object, ok := value.(map[string]any)
@@ -267,6 +274,9 @@ func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
 	if result["job_id"] == nil {
 		keys := []string{}
 		for key := range result {
+			if key == "validation" && isAPI {
+				continue
+			}
 			if key != "resource_id" && key != "status" && key != "resource_name" && key != "type" && key != "resource_version" {
 				keys = append(keys, key)
 			}
@@ -277,4 +287,18 @@ func printExecution(out io.Writer, result api.Execution, asJSON bool) error {
 		}
 	}
 	return nil
+}
+
+func printAPIResponse(out io.Writer, result api.Execution) error {
+	if err := executionFailure(result); err != nil {
+		return err
+	}
+	if result["completed"] != true || result["status"] != "success" {
+		return fmt.Errorf("API execution has not completed successfully; inspect job results")
+	}
+	value, exists := result["response"]
+	if !exists {
+		return fmt.Errorf("API response is unavailable; the server must support the response field")
+	}
+	return json.NewEncoder(out).Encode(value)
 }

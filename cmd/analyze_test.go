@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"vortexify-cli/internal/api"
 	"vortexify-cli/internal/config"
 )
 
@@ -188,5 +189,82 @@ func TestRunInlineAndStdinInputs(t *testing.T) {
 	}
 	if starts != 3 {
 		t.Fatal("started a job with invalid inputs", starts)
+	}
+}
+
+func TestAnalysisSelectsDatabaseEnvironmentWithoutProductionFallback(t *testing.T) {
+	tables := []api.TableSummary{
+		{ID: "preview", Type: "database", Name: "public.reason_reviews", DisplayName: "operations/public.reason_reviews [preview]", Environment: "preview", ResourceReference: "vortexify://table/database/operations/preview/public.reason_reviews"},
+		{ID: "origin", Type: "database", Name: "public.reason_reviews", DisplayName: "operations/public.reason_reviews [origin]", Environment: "origin", ResourceReference: "vortexify://table/database/operations/origin/public.reason_reviews"},
+		{ID: "sync", Type: "sync", Name: "default", DisplayName: "mes/orders/default"},
+	}
+	for _, deployed := range []bool{false, true} {
+		want := "preview"
+		if deployed {
+			want = "origin"
+		}
+		for _, reference := range []string{"operations.reason_reviews", "database:operations.reason_reviews", want, tables[map[bool]int{false: 0, true: 1}[deployed]].ResourceReference} {
+			table, err := resolveAnalysisTable(tables, reference, deployed)
+			if err != nil || table.ID != want {
+				t.Fatal(reference, deployed, table, err)
+			}
+		}
+		other := "origin"
+		if deployed {
+			other = "preview"
+		}
+		if _, err := resolveAnalysisTable(tables, other, deployed); err == nil {
+			t.Fatal("accepted a conflicting explicit environment", other, deployed)
+		}
+		if _, err := resolveAnalysisTable(tables, "mes.orders", deployed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := resolveAnalysisTable(tables[1:2], "operations.reason_reviews", false); err == nil {
+		t.Fatal("fell back to origin without preview")
+	}
+}
+
+func TestAnalyzeSubmitsTheSelectedDatabaseAndSyncedEnvironments(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	if err := config.Save(".", config.Default("project", "demo", "")); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		switch r.URL.Path {
+		case "/api/v2/data/tables/list_tables":
+			w.Write([]byte(`[{"id":"preview","type":"database","name":"public.reason_reviews","display_name":"operations/public.reason_reviews [preview]","environment":"preview","status":"registered"},{"id":"origin","type":"database","name":"public.reason_reviews","display_name":"operations/public.reason_reviews [origin]","environment":"origin","status":"registered"},{"id":"orders","type":"sync","name":"default","display_name":"mes/orders/default","status":"ready"}]`))
+		case "/api/v2/data/tables/start_analysis":
+			calls++
+			want := "preview"
+			if body["deployed"] == true {
+				want = "origin"
+			}
+			inputs := body["tables"].(map[string]any)
+			if inputs["reviews"] != want || inputs["orders"] != "orders" {
+				t.Error(body)
+			}
+			w.Write([]byte(`{"id":"job","status":"pending"}`))
+		default:
+			t.Error(r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	base := []string{"--api-url", server.URL, "--org-id", "org", "analyze", "--table", "reviews=operations.reason_reviews", "--table", "orders=mes.orders", "-c", "select * from reviews join orders on true", "--json"}
+	for _, deployed := range []bool{false, true} {
+		args := append([]string{}, base...)
+		if deployed {
+			args = append(args, "--deployed")
+		}
+		if out, err := run(t, args...); err != nil {
+			t.Fatal(out, err)
+		}
+	}
+	if calls != 2 {
+		t.Fatal(calls)
 	}
 }

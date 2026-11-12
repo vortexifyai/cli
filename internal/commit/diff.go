@@ -21,7 +21,7 @@ func FindChanges(local []resources.Resource, remote []api.Resource) []Change {
 		server, ok := registry[state.ResourceKey(r.Type, r.Name)]
 		if !ok {
 			changes = append(changes, Change{Resource: r})
-		} else if r.Hash != server.CodeHash || (server.Files != nil && server.Files.Changed) {
+		} else if server.Version == 0 || r.Hash != server.CodeHash || (server.Files != nil && server.Files.Changed) {
 			copy := server
 			changes = append(changes, Change{Resource: r, Remote: &copy})
 		}

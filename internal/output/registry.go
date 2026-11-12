@@ -21,7 +21,7 @@ func PrintRegistry(w io.Writer, resources []api.Resource) error {
 				image = r.Environment.Image
 			}
 		}
-		fmt.Fprintf(t, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Type, r.Name, r.ID, r.Version, r.DeploymentStatus, r.HealthStatus, r.PlanStatus, image, environment, r.ResourceReference)
+		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Type, r.Name, r.ID, resourceVersion(r.Version), r.DeploymentStatus, r.HealthStatus, r.PlanStatus, image, environment, r.ResourceReference)
 	}
 	return t.Flush()
 }
@@ -128,4 +128,11 @@ func impactLabel(change string) string {
 	default:
 		return ""
 	}
+}
+
+func resourceVersion(version int) string {
+	if version == 0 {
+		return "uncommitted"
+	}
+	return fmt.Sprint(version)
 }

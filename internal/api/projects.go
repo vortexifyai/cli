@@ -133,3 +133,27 @@ func (c *Client) DiscoveryService(ctx context.Context, endpoint, projectID strin
 	scoped.HTTPClient = &httpClient
 	return scoped.Service(ctx, endpoint, projectID, values)
 }
+
+// Guardian readiness belongs to a project, independently of Celery task IDs.
+type GuardianStatus struct {
+	Status    string  `json:"guardian_status"`
+	Error     *string `json:"guardian_error"`
+	UpdatedAt *string `json:"guardian_updated_at,omitempty"`
+}
+
+func (c *Client) GetGuardianStatus(ctx context.Context, projectID string) (*GuardianStatus, error) {
+	response, err := c.Service(ctx, "platform/projects/get_guardian_status", projectID, map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	return decode[GuardianStatus](response)
+}
+
+func (c *Client) ActivateGuardian(ctx context.Context, projectID string) error {
+	response, err := c.Service(ctx, "platform/projects/activate_guardian", projectID, map[string]any{})
+	if err != nil {
+		return err
+	}
+	_, err = decode[GuardianStatus](response)
+	return err
+}

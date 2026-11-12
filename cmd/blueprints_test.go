@@ -147,12 +147,27 @@ func TestBlueprintSearchContinuesConversationWithNaturalLanguageCriteria(t *test
 		if body["conversation_id"] != "saved" || body["query"] != "quality for automotive MES" || body["include_answer"] != true {
 			t.Error(body)
 		}
-		w.Write([]byte(`{"conversation_id":"saved","answer":"Use the coverage summary.","templates":[],"recommended_parts":[{"template_id":"hospital-scheduling","part_id":"coverage","title":"Coverage summary","reason":"Shows staffing gaps."}]}`))
+		w.Write([]byte(`{"conversation_id":"saved","answer":"Use the coverage summary. [S1]","templates":[],"sources":[{"source_id":"S1","kind":"template","id":"hospital-scheduling","part_id":"coverage"}],"recommended_parts":[{"template_id":"hospital-scheduling","part_id":"coverage","title":"Coverage summary","reason":"Shows staffing gaps."}]}`))
 	}))
 	defer server.Close()
 	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "blueprints", "search", "quality for automotive MES", "--conversation", "saved")
-	if err != nil || !strings.Contains(out, `"conversation_id": "saved"`) || !strings.Contains(out, `"blueprints"`) || !strings.Contains(out, `"recommended_parts"`) || !strings.Contains(out, "Shows staffing gaps.") {
+	if err != nil {
 		t.Fatal(out, err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(out, err)
+	}
+	if _, found := result["recommended_parts"]; found {
+		t.Fatal("JSON output includes frontend part cards", out)
+	}
+	sources, ok := result["sources"].([]any)
+	if result["conversation_id"] != "saved" || result["answer"] != "Use the coverage summary. [S1]" || result["blueprints"] == nil || !ok || len(sources) != 1 {
+		t.Fatal("search answer or references were lost", out)
+	}
+	source, ok := sources[0].(map[string]any)
+	if !ok || source["part_id"] != "coverage" || source["id"] != "hospital-scheduling" {
+		t.Fatal("part citation was lost", out)
 	}
 }
 

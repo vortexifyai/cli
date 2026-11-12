@@ -16,7 +16,11 @@ func tableLabel(table api.TableSummary) string {
 		return displayTableName(table.DisplayName, table.Type)
 	}
 	if table.Name != "" {
-		return displayTableName(table.Name, table.Type)
+		label := displayTableName(table.Name, table.Type)
+		if table.Type == "database" && table.Environment != "" {
+			label += " [" + table.Environment + "]"
+		}
+		return label
 	}
 	return "unavailable table (" + table.ID + ")"
 }
@@ -122,7 +126,7 @@ func tableDataSchemaStatuses(table api.TableSummary) (string, string) {
 }
 
 func tableGraphStatuses(graph *api.TableKnowledgeGraph) (string, string, string) {
-	if graph == nil {
+	if graph == nil || graph.Status == "not_applicable" {
 		return "not applicable", "not applicable", "not applicable"
 	}
 	status := strings.ReplaceAll(graph.Status, "_", " ")

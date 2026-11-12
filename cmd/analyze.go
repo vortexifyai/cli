@@ -76,7 +76,7 @@ func newAnalyzeCommand(opts *options) *cobra.Command {
 			return err
 		}
 		for alias, reference := range mapping {
-			table, err := resolveTable(available, reference)
+			table, err := resolveAnalysisTable(available, reference, deployed)
 			if err != nil {
 				return fmt.Errorf("analysis input %q: %w", alias, err)
 			}
@@ -127,9 +127,32 @@ func newAnalyzeCommand(opts *options) *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum preview rows")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Print structured JSON without animation")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for completion (always enabled in the SQL prompt)")
-	cmd.Flags().BoolVar(&deployed, "deployed", false, "Use deployed table outputs")
+	cmd.Flags().BoolVar(&deployed, "deployed", false, "Use deployed file-backed outputs and origin database tables (default: preview)")
 	cmd.Flags().StringVar(&job, "job", "", "Retrieve a completed analysis")
 	return cmd
+}
+
+// Database table IDs are environment-specific. Select names in the requested
+// environment, and reject explicit references to a different environment.
+func resolveAnalysisTable(tables []api.TableSummary, reference string, deployed bool) (*api.TableSummary, error) {
+	environment := "preview"
+	if deployed {
+		environment = "origin"
+	}
+	selected, err := resolveTable(tables, reference)
+	if err == nil {
+		if selected.Type == "database" && selected.Environment != environment {
+			return nil, fmt.Errorf("database table %q belongs to %s; analysis selects %s (use --deployed for origin or select a preview table)", reference, selected.Environment, environment)
+		}
+		return selected, nil
+	}
+	eligible := []api.TableSummary{}
+	for _, table := range tables {
+		if table.Type != "database" || table.Environment == environment {
+			eligible = append(eligible, table)
+		}
+	}
+	return resolveTable(eligible, reference)
 }
 
 func analysisResult(cmd *cobra.Command, c *api.Client, projectID, id string) (api.Execution, error) {

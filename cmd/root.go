@@ -29,7 +29,7 @@ func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{Use: "vortexify", Short: "Synchronize Vortexify project resources", Version: version, SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&opts.apiURL, "api-url", opts.apiURL, "Vortexify API URL")
 	root.PersistentFlags().StringVar(&opts.orgID, "org-id", os.Getenv("VORTEXIFY_ORG_ID"), "Explicit organization ID (skips organization selection)")
-	root.AddCommand(newProjectsCommand(opts), newKnowledgeGraphCommand(opts))
+	root.AddCommand(newGuardianCommand(opts), newProjectsCommand(opts), newKnowledgeGraphCommand(opts))
 	root.AddCommand(newCreateCommand(opts), newStatusCommand(opts), newLoginCommand(), newInitCommand(opts), newRegistryCommand(opts), newPullCommand(opts), newCommitCommand(opts), newDevCommand(opts), newRecoverCommand(opts))
 	root.AddCommand(executionCommands(opts)...)
 	root.AddCommand(newSkillsCommand(), newUpdateCommand())
@@ -42,7 +42,7 @@ func NewRootCommand() *cobra.Command {
 		&cobra.Group{ID: "setup", Title: "Setup and help:"},
 	)
 	groups := map[string][]string{
-		"projects":   {"commit", "create", "init", "knowledge-graph", "projects", "pull", "recover", "registry", "status"},
+		"projects":   {"commit", "create", "guardian", "init", "knowledge-graph", "projects", "pull", "recover", "registry", "status"},
 		"data":       {"analyze", "connector", "database", "files", "secret", "table", "tables", "upload"},
 		"execution":  {"build", "deploy", "dev", "job", "logs", "run", "test", "undeploy", "upgrade"},
 		"references": {"blueprints", "context"},

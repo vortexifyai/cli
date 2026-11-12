@@ -179,7 +179,7 @@ func newKnowledgeGraphCommand(opts *options) *cobra.Command {
 			if !capacity.Available {
 				return fmt.Errorf("knowledge graph capacity exceeded; disable another project or request a Business quota increase")
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "Enabling adds %d source datasets (%d potential pairs) to this project's knowledge graph and permits automatic PK and relationship analysis. Transform outputs are excluded.\n", capacity.Datasets, capacity.ProjectPairs)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Enabling adds %d source datasets (%d potential pairs) to this project's knowledge graph and permits automatic PK and relationship analysis. Transform outputs and database tables are excluded.\n", capacity.Datasets, capacity.ProjectPairs)
 			if !yes {
 				fmt.Fprint(cmd.ErrOrStderr(), "Enable knowledge graph? [y/N]: ")
 				scanner := bufio.NewScanner(cmd.InOrStdin())

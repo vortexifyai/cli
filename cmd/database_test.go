@@ -107,3 +107,41 @@ func TestDatabaseStatusAndApprovalDecisionsUseScopedServices(t *testing.T) {
 		t.Fatal("invalid input changed approval", decisions)
 	}
 }
+
+func TestDatabaseFailedPreviewMigrationHasLogsAndScopedRetry(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	if err := config.Save(".", config.Default("project", "demo", "")); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/artifacts/resources/get_resource_graph":
+			w.Write([]byte(`[{"id":"db","type":"database","name":"floor_ops","version":2}]`))
+		case "/api/v2/artifacts/resources/get_resource":
+			w.Write([]byte(`{"id":"db","name":"floor_ops","version":2}`))
+		case "/api/v2/data/databases/get_pending_database_migrations":
+			w.Write([]byte(`[]`))
+		case "/api/v2/execution/jobs/list_jobs":
+			w.Write([]byte(`[{"id":"origin-success","status":"success","resource_version":2,"config":{"environment":"origin"}},{"id":"preview-failed","status":"failed","resource_version":2,"config":{"environment":"preview","watcher_error":"guardian unavailable","secret":"never display"}},{"id":"older-preview","status":"failed","resource_version":1,"config":{"environment":"preview"}}]`))
+		case "/api/v2/data/databases/get_database_status":
+			w.Write([]byte(`{"environments":[{"environment":"origin","version":2},{"environment":"preview","version":0}],"latest_backup_jobs":[]}`))
+		default:
+			t.Error(r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "database", "floor_ops")
+	if err != nil {
+		t.Fatal(out, err)
+	}
+	for _, expected := range []string{"Migration job: preview-failed", "vortexify logs preview-failed", "--migrate 2 --environment preview", "guardian unavailable", "Migration job: origin-success"} {
+		if !strings.Contains(out, expected) {
+			t.Fatal(expected, out)
+		}
+	}
+	if strings.Contains(out, "older-preview") || strings.Contains(out, "never display") {
+		t.Fatal(out)
+	}
+}

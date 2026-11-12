@@ -138,6 +138,10 @@ func printTableDetails(out io.Writer, details *api.TableDetails, names map[strin
 			tableProse(&b, "    ", "Error: "+evaluation.LastError)
 		}
 	}
+	if state := table.KnowledgeGraph; state != nil && state.WaitingReason != "" {
+		fmt.Fprintln(&b)
+		tableProse(&b, "  ", "Knowledge graph waiting: "+state.WaitingReason)
+	}
 	if state := table.KnowledgeGraph; state != nil && state.Error != "" {
 		fmt.Fprintln(&b)
 		tableProse(&b, "  ", "Knowledge graph error: "+state.Error)

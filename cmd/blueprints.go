@@ -259,6 +259,12 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 			if asYAML {
 				return yaml.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
+			if action == "search" {
+				if object, ok := result.(map[string]any); ok {
+					// Part cards are a frontend presentation selection, not search results.
+					delete(object, "recommended_parts")
+				}
+			}
 			encoder := json.NewEncoder(cmd.OutOrStdout())
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(result)
