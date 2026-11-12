@@ -4,6 +4,13 @@ Build and manage Vortexify projects from your terminal. Create resources, synchr
 
 ## Changelog
 
+### v0.1.6
+
+- Add `skills install --agent-path` for selecting a Codex or Claude CLI executable, including desktop-bundled binaries outside PATH. Keep PATH lookup as the default and explain the override when the executable cannot be found. `--dry-run` prints the selected executable without requiring it to be installed.
+- Save blueprint-wide and per-part usage notes with `blueprints attach --usage-note ... --part ... --part-note PART_ID=NOTE`. Repeat `--part` and `--part-note` for multiple parts; omitted fields and notes stay unchanged. Empty notes clear the corresponding note, and deselecting a part removes its note.
+- Use the current workspace as blueprint-search project context, or select one with `--project-id`. Search remains available outside a workspace. The discovery agent can inspect design code and attach references when explicitly requested.
+- Remove blueprint-search taxonomy flags: `--industry`, `--subindustry`, `--category`, `--subcategory`, `--module`, `--solution-type`, and `--use-case`. Put these preferences in the search question instead; `--conversation` still continues a saved search.
+
 ### v0.1.5
 
 - Add `deploy sync/transform --run` and `upgrade sync/transform --run` to execute in production and activate the selected version after successful output publication. Accept runtime inputs with `--inputs` or `--inputs-file` on deploy and upgrade.
@@ -317,7 +324,7 @@ vortexify blueprints read dashboard
 vortexify blueprints search "How does that roster section work?" --conversation <conversation-id>
 ```
 
-Project discovery similarly investigates accessible projects, apps, committed documents and resource code. Both searches return a `conversation_id`; omit `--conversation` to start fresh. Saved conversations are private to your account and organization; browse previous conversations in the app UI. Blueprint filters (`--industry`, `--subindustry`, `--category`, `--subcategory`, `--module`) are retained for the conversation.
+Project discovery similarly investigates accessible projects, apps, committed documents and resource code. Both searches return a `conversation_id`; omit `--conversation` to start fresh. Saved conversations are private to your account and organization; browse previous conversations in the app UI. Describe industry, category and other preferences in the question; the agent can refine them through follow-up questions.
 
 ## Install coding-agent skills
 
@@ -328,7 +335,13 @@ vortexify skills install --agent codex
 vortexify skills install --agent claude
 ```
 
-The selected coding tool must be installed. Its plugin manager handles installation, updates, and removal. Use `--source GIT_URL` to select another skills repository, or `--dry-run` to print the installation commands.
+The selected coding tool must be installed. By default, the CLI looks for `codex` or `claude` on PATH. If your desktop app bundles the CLI without adding it to PATH, supply its executable path explicitly:
+
+```sh
+vortexify skills install --agent claude --agent-path "/path/to/bundled/claude"
+```
+
+`--agent` still selects the plugin-manager commands; `--agent-path` only selects the executable. Its plugin manager handles installation, updates, and removal. Use `--source GIT_URL` to select another skills repository, or `--dry-run` to print the installation commands without requiring the binary to be installed.
 
 ## Help and scripting
 
@@ -376,3 +389,37 @@ reuses active/successful processing; uploading a file again creates a new upload
 Development and production outputs and sync checkpoints are separate for each committed version. Deployment never copies preview output or checkpoints. A new incremental sync version starts without a production checkpoint and must support that initial state. Existing production state for the same version is retained.
 
 Use `vx run sync erp/orders --production` or `vx run transform order_readiness --production` for later runs of a deployed version. Production requires a deployed version; ordinary runs use development. Apply required origin database migrations separately before deployment. A failed deployment keeps the previous version selected, but cannot undo writes the run already made to databases or external systems.
+
+
+### Project-specific blueprint references
+
+```sh
+vortexify blueprints metadata budget-planning-hospitals
+vortexify blueprints attach budget-planning-hospitals \
+  --usage-note "Use the department hierarchy for our planning workflow" \
+  --part budget-planning-hospitals-hospital-departments \
+  --part-note "budget-planning-hospitals-hospital-departments=Reuse the department navigation"
+vortexify blueprints search "Read the design code, then attach the useful department planning parts with a usage note"
+vortexify blueprints search "Find suitable scheduling parts for this project" --project-id PROJECT_ID
+```
+
+Repeat `--part` to select multiple parts. An omitted usage note or part list preserves
+existing attachment context; `--usage-note ""` clears the note. `blueprints list`
+returns saved usage notes and selected part IDs with the reference. Project agents
+receive the same intent when listing or reading attached designs.
+
+`--usage-note` applies to the blueprint in general. Repeat `--part-note PART_ID=NOTE`
+to give selected parts their own instructions. Updating a part note alone preserves
+the general note, selected parts, and other part notes. Use `--part-note PART_ID=`
+to clear one note. An explicit `--part` list still replaces the selection and removes
+notes for deselected parts. Part IDs must belong to the blueprint, and notes require
+the corresponding part to be selected. List/read responses expose the notes in
+`part_usage_notes`, keyed by canonical part ID.
+
+Blueprint search uses the workspace project when run inside one and remains
+organization-scoped outside a workspace. Conversations remain private to your
+account and organization; the optional project is context, not conversation ownership.
+Without project context, the agent can list accessible projects and read relevant
+context/knowledge files to resolve a requested destination. It asks when a project
+name is ambiguous. Attaching requires editor access and an explicit request; ordinary
+searches do not attach anything. An attachment is a reference, not a built app.

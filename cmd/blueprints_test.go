@@ -31,10 +31,10 @@ func TestBlueprintSearchAndAttachmentsUseDirectServices(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&values); err != nil {
 			t.Error(err)
 		}
-		if (strings.HasSuffix(r.URL.Path, "/search") && values["project_id"] != nil) || (!strings.HasSuffix(r.URL.Path, "/search") && values["project_id"] != "project") || values["org_id"] != "org" {
+		if values["project_id"] != "project" || values["org_id"] != "org" {
 			t.Error("missing project/org scope")
 		}
-		if strings.HasSuffix(r.URL.Path, "/search") && (values["query"] != "nurse scheduling" || values["industry"] != "healthcare" || values["limit"] != float64(5) || values["include_answer"] != true) {
+		if strings.HasSuffix(r.URL.Path, "/search") && (values["query"] != "nurse scheduling in healthcare" || values["limit"] != float64(5) || values["include_answer"] != true) {
 			t.Error("missing search options")
 		}
 		if strings.HasSuffix(r.URL.Path, "/attach") && (values["template_id"] != "shift-planner" || values["attached"] != (len(endpoints) == 4)) {
@@ -42,17 +42,17 @@ func TestBlueprintSearchAndAttachmentsUseDirectServices(t *testing.T) {
 		}
 		result := map[string]any{"templates": []map[string]any{{"id": "shift-planner"}}}
 		if strings.HasSuffix(r.URL.Path, "/search") {
-			result["answer"] = "Use the shift planner for nurse scheduling."
+			result["answer"] = "Use the shift planner for nurse scheduling in healthcare."
 		}
 		json.NewEncoder(w).Encode(result)
 	}))
 	defer server.Close()
-	for _, args := range [][]string{{"list"}, {"search", "nurse scheduling", "--industry", "healthcare", "--limit", "5"}, {"metadata", "shift-planner"}, {"attach", "shift-planner"}, {"detach", "shift-planner"}} {
+	for _, args := range [][]string{{"list"}, {"search", "nurse scheduling in healthcare", "--limit", "5"}, {"metadata", "shift-planner"}, {"attach", "shift-planner"}, {"detach", "shift-planner"}} {
 		out, err := run(t, append([]string{"--api-url", server.URL, "--org-id", "org", "blueprints"}, args...)...)
 		if err != nil || !strings.Contains(out, "blueprints") || strings.Contains(out, "templates:") {
 			t.Fatal(err)
 		}
-		if args[0] == "search" && !strings.Contains(out, "Use the shift planner for nurse scheduling.") {
+		if args[0] == "search" && !strings.Contains(out, "Use the shift planner for nurse scheduling in healthcare.") {
 			t.Fatalf("generated answer missing from output: %s", out)
 		}
 	}
@@ -138,20 +138,96 @@ func TestBlueprintPreviewRejectsEscapingPathsAndMixedReleases(t *testing.T) {
 	}
 }
 
-func TestBlueprintSearchContinuesConversationWithTaxonomy(t *testing.T) {
+func TestBlueprintSearchContinuesConversationWithNaturalLanguageCriteria(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("VORTEXIFY_TOKEN", "token")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		if body["conversation_id"] != "saved" || body["category"] != "MES" || body["subindustry"] != "Automotive" || body["include_answer"] != true {
+		if body["conversation_id"] != "saved" || body["query"] != "quality for automotive MES" || body["include_answer"] != true {
 			t.Error(body)
 		}
 		w.Write([]byte(`{"conversation_id":"saved","answer":"Use the coverage summary.","templates":[],"recommended_parts":[{"template_id":"hospital-scheduling","part_id":"coverage","title":"Coverage summary","reason":"Shows staffing gaps."}]}`))
 	}))
 	defer server.Close()
-	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "blueprints", "search", "quality", "--conversation", "saved", "--category", "MES", "--subindustry", "Automotive")
+	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "blueprints", "search", "quality for automotive MES", "--conversation", "saved")
 	if err != nil || !strings.Contains(out, `"conversation_id": "saved"`) || !strings.Contains(out, `"blueprints"`) || !strings.Contains(out, `"recommended_parts"`) || !strings.Contains(out, "Shows staffing gaps.") {
 		t.Fatal(out, err)
+	}
+}
+
+func TestBlueprintAttachSendsUsageNoteAndSelectedParts(t *testing.T) {
+	blueprintWorkspace(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var values map[string]any
+		json.NewDecoder(r.Body).Decode(&values)
+		if values["usage_note"] != "Use the coverage section for nurse assignments" || values["project_id"] != "project" {
+			t.Error(values)
+		}
+		parts, ok := values["part_ids"].([]any)
+		if !ok || len(parts) != 2 || parts[0] != "coverage" || parts[1] != "roster" {
+			t.Error(values)
+		}
+		notes, ok := values["part_usage_notes"].(map[string]any)
+		if !ok || notes["coverage"] != "Show coverage=staffing gaps" || notes["roster"] != "" {
+			t.Error(values)
+		}
+		w.Write([]byte(`{"designs":[]}`))
+	}))
+	defer server.Close()
+	_, err := run(t, "--api-url", server.URL, "--org-id", "org", "blueprints", "attach", "hospital-scheduling", "--usage-note", "Use the coverage section for nurse assignments", "--part", "coverage", "--part", "roster", "--part-note", "coverage=Show coverage=staffing gaps", "--part-note", "roster=")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBlueprintPartNoteUpdatePreservesOmittedFields(t *testing.T) {
+	blueprintWorkspace(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var values map[string]any
+		json.NewDecoder(r.Body).Decode(&values)
+		if _, exists := values["part_ids"]; exists {
+			t.Error("note-only update replaced the selection")
+		}
+		if _, exists := values["usage_note"]; exists {
+			t.Error("note-only update replaced the general note")
+		}
+		if values["part_usage_notes"].(map[string]any)["coverage"] != "Updated intent" {
+			t.Error(values)
+		}
+		w.Write([]byte(`{"designs":[]}`))
+	}))
+	defer server.Close()
+	_, err := run(t, "--api-url", server.URL, "--org-id", "org", "blueprints", "attach", "hospital-scheduling", "--part-note", "coverage=Updated intent")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBlueprintPartNoteRejectsMalformedInput(t *testing.T) {
+	blueprintWorkspace(t)
+	for _, entry := range []string{"coverage", "=missing id", "  =missing id"} {
+		_, err := run(t, "--org-id", "org", "blueprints", "attach", "hospital-scheduling", "--part-note", entry)
+		if err == nil || !strings.Contains(err.Error(), "PART_ID=NOTE") {
+			t.Fatalf("accepted malformed note %q: %v", entry, err)
+		}
+	}
+}
+
+func TestBlueprintSearchAcceptsExplicitProjectOutsideWorkspace(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("VORTEXIFY_TOKEN", "token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var values map[string]any
+		json.NewDecoder(r.Body).Decode(&values)
+		if values["project_id"] != "selected-project" || values["query"] != "Inspect the code and attach the coverage part" {
+			t.Error(values)
+		}
+		w.Write([]byte(`{"answer":"Attached the coverage reference.","templates":[]}`))
+	}))
+	defer server.Close()
+	_, err := run(t, "--api-url", server.URL, "--org-id", "org", "blueprints", "search", "Inspect the code and attach the coverage part", "--project-id", "selected-project")
+	if err != nil {
+		t.Fatal(err)
 	}
 }

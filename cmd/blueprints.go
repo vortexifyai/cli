@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 	"vortexify-cli/internal/api"
+	"vortexify-cli/internal/config"
 )
 
 type templateFile struct {
@@ -124,7 +126,25 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 			client := api.NewClient(opts.apiURL)
 			projectID := ""
 			if action == "search" {
-				if err := selectOrganization(cmd, client, opts.orgID); err != nil {
+				projectID, _ = cmd.Flags().GetString("project-id")
+				if projectID == "" {
+					root, err := config.FindProjectRoot()
+					if err == nil {
+						cfg, loadErr := config.Load(root)
+						if loadErr != nil {
+							return loadErr
+						}
+						projectID = cfg.ProjectID
+					} else if !errors.Is(err, config.ErrProjectNotFound) {
+						return err
+					}
+				}
+				if projectID != "" {
+					client.OrgID = opts.orgID
+					if err := client.ProjectOrg(cmd.Context(), projectID); err != nil {
+						return err
+					}
+				} else if err := selectOrganization(cmd, client, opts.orgID); err != nil {
 					return err
 				}
 			} else {
@@ -156,12 +176,7 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 					return fmt.Errorf("limit must be from 1 to 20")
 				}
 				values["limit"] = limit
-				for _, flag := range []string{"industry", "solution-type", "use-case", "category", "subcategory", "module", "subindustry"} {
-					value, _ := cmd.Flags().GetString(flag)
-					if value != "" {
-						values[strings.ReplaceAll(flag, "-", "_")] = value
-					}
-				}
+
 			case "metadata":
 				endpoint = "metadata"
 				values["template_id"] = args[0]
@@ -175,6 +190,28 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 				endpoint = "attach"
 				values["template_id"] = args[0]
 				values["attached"] = action == "attach"
+				if action == "attach" {
+					if cmd.Flags().Changed("usage-note") {
+						note, _ := cmd.Flags().GetString("usage-note")
+						values["usage_note"] = note
+					}
+					if cmd.Flags().Changed("part") {
+						parts, _ := cmd.Flags().GetStringArray("part")
+						values["part_ids"] = parts
+					}
+					if cmd.Flags().Changed("part-note") {
+						entries, _ := cmd.Flags().GetStringArray("part-note")
+						notes := make(map[string]string)
+						for _, entry := range entries {
+							part, note, ok := strings.Cut(entry, "=")
+							if !ok || strings.TrimSpace(part) == "" {
+								return fmt.Errorf("--part-note must use PART_ID=NOTE; use PART_ID= to clear a note")
+							}
+							notes[strings.TrimSpace(part)] = note
+						}
+						values["part_usage_notes"] = notes
+					}
+				}
 			}
 			service := client.Service
 			if action == "search" {
@@ -230,14 +267,9 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 	cmd := &cobra.Command{Use: "blueprints", Short: "Search blueprints and manage project attachments", Args: cobra.NoArgs, RunE: run("attached")}
 	cmd.AddCommand(&cobra.Command{Use: "list", Short: "List attached project blueprints", Args: cobra.NoArgs, RunE: run("attached")})
 	search := &cobra.Command{Use: "search <query>", Short: "Search the full blueprint catalog", Args: cobra.MinimumNArgs(1), RunE: run("search")}
+	search.Flags().String("project-id", "", "Project context for recommendations and requested attachments (defaults to the current workspace)")
 	search.Flags().String("conversation", "", "Continue a saved search conversation; omit to start a new search")
-	for _, flag := range []string{"category", "subcategory", "module", "subindustry"} {
-		search.Flags().String(flag, "", "Filter by "+flag)
-	}
 	search.Flags().Int("limit", 10, "Maximum matching blueprints (1–20)")
-	search.Flags().String("industry", "", "Filter by industry")
-	search.Flags().String("solution-type", "", "Filter by solution type")
-	search.Flags().String("use-case", "", "Filter by use case")
 	search.Flags().Bool("yaml", false, "Print structured metadata as YAML")
 	cmd.AddCommand(search)
 	metadata := &cobra.Command{Use: "metadata <blueprint-name>", Short: "Read blueprint metadata and available files", Args: cobra.ExactArgs(1), RunE: run("metadata")}
@@ -255,7 +287,13 @@ func newBlueprintsCommand(opts *options) *cobra.Command {
 		if action == "detach" {
 			short = "Detach a blueprint from this project"
 		}
-		cmd.AddCommand(&cobra.Command{Use: action + " <blueprint-name>", Short: short, Args: cobra.ExactArgs(1), RunE: run(action)})
+		sub := &cobra.Command{Use: action + " <blueprint-name>", Short: short, Args: cobra.ExactArgs(1), RunE: run(action)}
+		if action == "attach" {
+			sub.Flags().String("usage-note", "", "How this blueprint should be used in this project; omitted values preserve existing notes")
+			sub.Flags().StringArray("part", nil, "Selected part ID from blueprint metadata; repeat to select multiple parts")
+			sub.Flags().StringArray("part-note", nil, "Usage note for a selected part as PART_ID=NOTE; repeat for multiple parts, use PART_ID= to clear, omitted notes stay unchanged")
+		}
+		cmd.AddCommand(sub)
 	}
 	return cmd
 }

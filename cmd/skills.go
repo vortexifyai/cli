@@ -42,14 +42,18 @@ func skillInstallCommands(agent, source string) ([]pluginCommand, error) {
 // settings-file writes, and no Vortexify project or authentication required.
 func newSkillsCommand() *cobra.Command {
 	return skillsCommand(func(cmd *cobra.Command, ctx context.Context, invocation pluginCommand) error {
-		process := exec.CommandContext(ctx, invocation.Program, invocation.Args...)
+		binary, err := exec.LookPath(invocation.Program)
+		if err != nil {
+			return fmt.Errorf("cannot execute coding-tool binary %q: %w; install its CLI or add it to PATH, or use --agent-path \"/absolute/path/to/binary\" to select an executable, including one bundled with a desktop app", invocation.Program, err)
+		}
+		process := exec.CommandContext(ctx, binary, invocation.Args...)
 		process.Stdin, process.Stdout, process.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
 		return process.Run()
 	})
 }
 
 func skillsCommand(run func(*cobra.Command, context.Context, pluginCommand) error) *cobra.Command {
-	var agent, source string
+	var agent, source, agentPath string
 	var dryRun bool
 	command := &cobra.Command{Use: "skills", Short: "Install Vortexify skills through your coding tool's plugin manager"}
 	install := &cobra.Command{
@@ -59,13 +63,21 @@ func skillsCommand(run func(*cobra.Command, context.Context, pluginCommand) erro
 			if err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("agent-path") {
+				if strings.TrimSpace(agentPath) == "" {
+					return fmt.Errorf("--agent-path must name an executable CLI binary")
+				}
+				for i := range commands {
+					commands[i].Program = agentPath
+				}
+			}
 			if dryRun {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(commands)
 			}
 			for i, invocation := range commands {
 				if err := run(cmd, cmd.Context(), invocation); err != nil {
 					if i == 0 {
-						return fmt.Errorf("could not register the Vortexify marketplace with %s: %w; install/update that coding tool and check access to --source", agent, err)
+						return fmt.Errorf("could not register the Vortexify marketplace with %s: %w", agent, err)
 					}
 					return fmt.Errorf("marketplace registered, but plugin installation failed: %w; use %s's plugin manager to inspect or retry", err, agent)
 				}
@@ -75,6 +87,7 @@ func skillsCommand(run func(*cobra.Command, context.Context, pluginCommand) erro
 		},
 	}
 	install.Flags().StringVar(&agent, "agent", "", "Coding tool: codex or claude (required)")
+	install.Flags().StringVar(&agentPath, "agent-path", "", "Path to the coding tool's CLI binary; defaults to finding --agent on PATH")
 	install.Flags().StringVar(&source, "source", skillsMarketplaceSource, "Marketplace Git source or local agent-skills directory; remote installation requires a published source you can access")
 	install.Flags().BoolVar(&dryRun, "dry-run", false, "Print native commands as JSON without installing anything")
 	_ = install.MarkFlagRequired("agent")
