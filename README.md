@@ -4,14 +4,14 @@ Build and manage Vortexify projects from your terminal. Create resources, synchr
 
 ## Changelog
 
-### Unreleased (planned v0.1.8)
+### v0.1.8
 
 - Add project guardian status, wait and retry commands, and show new starter resources as uncommitted until their first explicit commit.
 - Expose API return values at `response`; add `run api --response-only` and keep migration/job output focused on public status fields.
 - Show the latest database migration attempt per environment, authenticated app preview links and published deployment URLs. Omit automatic validation status for APIs.
 - Include preview database tables in inventory, resolve SQL analysis to preview by default or origin with `--deployed`, and show detailed key/relationship findings.
 - Distinguish excluded knowledge graph tables from pending work and omit frontend recommendation cards from blueprint-search JSON while retaining citations and YAML output.
-- Clarify saved-version mock testing and ready API runtime preparation. These changes require the corresponding API/watcher rollout.
+- Clarify saved-version mock testing and API runtime preparation.
 
 ### v0.1.7
 
@@ -35,8 +35,6 @@ Build and manage Vortexify projects from your terminal. Create resources, synchr
 - Add conversational project/app and blueprint discovery. Refine a search with `--conversation <id>`; omit the flag to start fresh. Browse saved searches in the app UI.
 - Allow organization-scoped blueprint searches without a project workspace, with category, subcategory, module and subindustry filters. Return specific blueprint part recommendations with reasons and citations.
 - Allow longer discovery requests when the assistant needs multiple tool calls.
-
-These features require the corresponding API changes. Production output/checkpoint isolation also requires the matching watcher and runtime updates; the CLI release alone does not change stored data or execution behavior.
 
 ## Installation
 
@@ -125,7 +123,7 @@ vortexify commit
 vortexify pull
 ```
 
-`create` registers a resource and supplies starter code. Edit its files, inspect changes with `status`, and save a new version with `commit`. Use `pull` to retrieve saved code and project documents.
+`create` registers a resource and supplies starter code. Edit its files, inspect changes with `status`, and save a new version with `commit`. The first commit creates version 1, even if the starter is unchanged. Use `pull` to retrieve saved code and project documents.
 
 You can select individual resources:
 
@@ -155,21 +153,11 @@ vortexify test transform orders --wait
 vortexify test api customer_orders --wait
 ```
 
-`vortexify test` runs SDK mock tests on the server against the selected immutable
-committed resource version, including its saved tests and mock factories, using
-its selected dependency image. Results are recorded with that version's job. This
-keeps platform verification tied to saved source and its runtime rather than
-unsaved local edits or a developer's Python environment. Use `--version N` to test
-a specific committed version.
+`vortexify test` runs mock tests against committed source. Use `--version N` to select a saved version and inspect the test results for that job.
 
-Mock inputs are checked against the SDK declarations before resource execution:
-input names, required values, scalar types and supported mock object types must
-match. Tests must assert table-column and business rules themselves. Required
-resource inputs must be mocked explicitly; missing mocks never fall back to live
-data. No CSV generation or preview database seeding happens automatically. Use
-`vortexify run` for separate checks against real preview inputs. Local
-`vortexify.testing.run_tests(...)` provides optional quick feedback; it does not
-submit a platform job or verify that a committed version passes on the server.
+Supply explicit mocks for resource inputs and write assertions for expected columns and business rules. Missing required mocks are errors. Use `vortexify run` for integration checks with real preview data, or `vortexify.testing.run_tests(...)` for local test feedback.
+
+APIs should implement required request and response checks in their code or tests. Automatic output validation is available for transforms.
 
 API runs expose the actual return value at the top-level `response` key in `--json` output, alongside job status. Successful null returns have `"response": null`; pending or failed runs omit that key. To wait and print only the API value as JSON (without progress or job metadata):
 
@@ -245,7 +233,7 @@ vortexify undeploy app dashboard
 
 Apps, APIs, transforms, agents, connectors, and syncs support deployment. New commits do not automatically replace deployed versions. Deploy upstream resources separately when your app or workflow depends on them.
 
-API build/deploy preparation completes during the server request when its existing Lambda already has the matching image and runtime configuration and is ready. Creation or updates that need more time continue asynchronously through the watcher; use `--wait` to follow the job.
+Building prepares an API for requests. Preparation may complete immediately or continue in the background; use `--wait` to follow the job. Open an app build's preview link to view it in the authenticated dashboard.
 
 For an app hostname, pass a subdomain label:
 
@@ -299,21 +287,9 @@ use the environment-qualified display name, canonical reference, or ID when name
 are ambiguous. Transform outputs and database tables remain listed, with automatic
 knowledge graph analysis marked `not applicable`.
 
-Knowledge graph discovery includes sync datasets and uploaded tables only. Up to
-five tables per project can undergo primary-key analysis concurrently. As soon as
-two tables have completed key analysis for their current publication, relevant
-relationship comparisons can start while other tables continue analyzing (up to
-two pair evaluations per project). Completion can include finding no meaningful
-key or no relationship. Capacity counts use only eligible datasets: 15 sync
-datasets and no uploads mean 15 eligible datasets and 105 potential pairs,
-regardless of how many transform outputs or database tables exist.
+Knowledge graph discovery analyzes sync datasets and uploaded tables. Key and relationship findings become available as analysis progresses; a completed analysis can find no meaningful key or relationship.
 
-Use `vortexify table TABLE --verbose` or `--json` for findings and associated job
-IDs, and `vortexify logs JOB_ID` for timestamped queue, model, SQL child-job,
-agent and total-attempt timings. A SQL child-job duration includes scheduling and
-startup; it is not SQL execution time alone. PK completion does not imply that
-relationships with still-unready tables have been evaluated.
-
+Use `vortexify table TABLE --verbose` or `--json` to inspect findings and associated jobs, and `vortexify logs JOB_ID` to investigate an analysis failure.
 
 Search attached documents or inspect extracted text:
 
@@ -371,7 +347,7 @@ vortexify database operations_db --migrate 2 --environment preview
 vortexify database operations_db --reject 2
 ```
 
-The database view shows pending SQL changes and migration jobs. Approval and rejection select an explicit saved version and require project admin access. Track the resulting job with `vortexify job JOB_ID --wait`.
+The database view shows pending SQL changes and the latest migration attempt for each environment. Approval and rejection select an explicit saved version and require project admin access. Track the resulting job with `vortexify job JOB_ID --wait`; use `vortexify logs JOB_ID` to investigate a failure before retrying.
 
 ## Project context and blueprints
 
@@ -393,7 +369,7 @@ vortexify blueprints list
 vortexify blueprints read dashboard
 ```
 
-`search` starts a new blueprint discovery conversation; the assistant can refine searches and read design documentation or code. JSON output omits the frontend-only `recommended_parts` card selection and preserves the answer and its source citations, including part IDs. `--yaml` retains that field. `list` shows blueprints attached to your project. Continue refining a search explicitly:
+`search` starts a blueprint discovery conversation and returns an answer, source citations and a conversation ID. The assistant can refine searches and read design documentation or code. Use `--yaml` for additional recommendation metadata. `list` shows blueprints attached to your project. Continue refining a search explicitly:
 
 ```sh
 vortexify blueprints search "How does that roster section work?" --conversation <conversation-id>
@@ -514,13 +490,6 @@ The complete convention is in
 [document links](https://github.com/vortexifyai/skills/blob/main/skills/vortexify-project/references/document-links.md).
 
 
-## Guardian readiness and new resources
+## Guardian readiness
 
-Use `vortexify guardian --wait` to wait for project guardian activation without a
-task ID (`--json` inspects status; `--retry --wait` retries failed activation).
-New resources are uncommitted starter baselines until their first explicit commit,
-which creates version 1. Database status identifies the newest migration attempt
-per environment and gives logs/retry commands for failures. App preview links open
-the authenticated dashboard resource view. API output omits validation status;
-API validator declarations warn at commit because automatic output validation is
-supported for transforms, not preview or deployed APIs.
+Projects must finish activation before they can run jobs. Check status with `vortexify guardian --json`, or wait with `vortexify guardian --wait`. If activation fails, inspect the error and retry with `vortexify guardian --retry --wait`; retry requires editor access. Once activation succeeds, retry any operation that failed while the project was unready.
