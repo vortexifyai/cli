@@ -29,6 +29,9 @@ func tableProse(out io.Writer, indent, text string) {
 }
 
 func printTableDetails(out io.Writer, details *api.TableDetails, names map[string]string, verbose bool) error {
+	if details.Table.ResourceReference != "" {
+		fmt.Fprintf(out, "Reference: %s\n", details.Table.ResourceReference)
+	}
 	var b bytes.Buffer
 	table := details.Table
 	graph, keys, relationships := tableGraphStatuses(table.KnowledgeGraph)

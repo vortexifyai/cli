@@ -33,6 +33,7 @@ func (c *Client) GetFunctionEnvironment(ctx context.Context, projectID, function
 }
 
 type Resource struct {
+	ResourceReference    string                `json:"resource_reference,omitempty"`
 	MigrationStatus      string                `json:"migration_status,omitempty"`
 	MigrationEnvironment string                `json:"migration_environment,omitempty"`
 	Files                *resources.FileStatus `json:"files,omitempty"`

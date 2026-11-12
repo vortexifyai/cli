@@ -10,17 +10,18 @@ import (
 
 // TableSummary contains table metadata and discovery state, never job configuration.
 type TableSummary struct {
-	DisplayName    string               `json:"display_name,omitempty"`
-	Description    string               `json:"description,omitempty"`
-	KnowledgeGraph *TableKnowledgeGraph `json:"knowledge_graph,omitempty"`
-	ID             string               `json:"id"`
-	Name           string               `json:"name"`
-	Type           string               `json:"type"`
-	Environment    string               `json:"environment,omitempty"`
-	Status         string               `json:"status"`
-	DiscoveryJobID string               `json:"discovery_job_id,omitempty"`
-	Error          string               `json:"error,omitempty"`
-	WaitingReason  string               `json:"waiting_reason,omitempty"`
+	ResourceReference string               `json:"resource_reference,omitempty"`
+	DisplayName       string               `json:"display_name,omitempty"`
+	Description       string               `json:"description,omitempty"`
+	KnowledgeGraph    *TableKnowledgeGraph `json:"knowledge_graph,omitempty"`
+	ID                string               `json:"id"`
+	Name              string               `json:"name"`
+	Type              string               `json:"type"`
+	Environment       string               `json:"environment,omitempty"`
+	Status            string               `json:"status"`
+	DiscoveryJobID    string               `json:"discovery_job_id,omitempty"`
+	Error             string               `json:"error,omitempty"`
+	WaitingReason     string               `json:"waiting_reason,omitempty"`
 }
 
 // TableKnowledgeGraph is the existing server's table-level discovery summary.

@@ -40,6 +40,9 @@ func tableReferences(table api.TableSummary) []string {
 }
 
 func tableMatches(table api.TableSummary, reference string) bool {
+	if strings.HasPrefix(reference, "vortexify://") {
+		return table.ResourceReference != "" && reference == table.ResourceReference
+	}
 	if kind, value, typed := strings.Cut(reference, ":"); typed {
 		if kind != table.Type {
 			return false

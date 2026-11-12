@@ -4,6 +4,13 @@ Build and manage Vortexify projects from your terminal. Create resources, synchr
 
 ## Changelog
 
+### v0.1.7
+
+- Expose canonical resource references in registry and table output.
+- Accept canonical table references in table commands.
+- Warn about workspace-dependent links in project documents.
+- Update generated project instructions with portable resource-link conventions.
+
 ### v0.1.6
 
 - Add `skills install --agent-path` for selecting a Codex or Claude CLI executable, including desktop-bundled binaries outside PATH. Keep PATH lookup as the default and explain the override when the executable cannot be found. `--dry-run` prints the selected executable without requiring it to be installed.
@@ -423,3 +430,17 @@ Without project context, the agent can list accessible projects and read relevan
 context/knowledge files to resolve a requested destination. It asks when a project
 name is ambiguous. Attaching requires editor access and an explicit request; ordinary
 searches do not attach anything. An attachment is a reference, not a built app.
+
+
+### Links in context and knowledge-base documents
+
+Use relative Markdown links between documents. For registered resources, copy
+`resource_reference` from `vortexify registry --json` or `vortexify tables --json`:
+`[Plants](vortexify://table/sync/mes/plants)` and
+`[Forecast](vortexify://transform/forecast)`. These open the resource/table in the
+current project and do not depend on a workspace's local resource paths. Do not
+use `vortexify://table/default` or infer links from YAML paths. Default outputs
+omit `/default`; named outputs include their encoded output name. Missing or
+ambiguous targets show an error. Links do not run resources or pin versions.
+The complete convention is in
+[document links](https://github.com/vortexifyai/skills/blob/main/skills/vortexify-project/references/document-links.md).

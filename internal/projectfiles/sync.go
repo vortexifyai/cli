@@ -150,6 +150,9 @@ func Sync(ctx context.Context, root string, cfg *config.ProjectConfig, c *api.Cl
 				if err != nil {
 					return count, err
 				}
+				if filepath.Ext(path) == ".md" {
+					warnSourceLinks(out, name, path, string(body))
+				}
 				files[path] = base64.StdEncoding.EncodeToString(body)
 			}
 			// Detect edits made while reading the snapshot.

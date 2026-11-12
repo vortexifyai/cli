@@ -54,11 +54,11 @@ func newTablesCommand(opts *options) *cobra.Command {
 			return err
 		}
 		writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-		fmt.Fprintln(writer, "NAME\tTYPE\tDATA\tSCHEMA\tKNOWLEDGE GRAPH\tPRIMARY KEYS\tRELATIONSHIPS\tID")
+		fmt.Fprintln(writer, "NAME\tTYPE\tDATA\tSCHEMA\tKNOWLEDGE GRAPH\tPRIMARY KEYS\tRELATIONSHIPS\tID\tREFERENCE")
 		for _, table := range selected {
 			graph, keys, relationships := tableGraphStatuses(table.KnowledgeGraph)
 			data, schema := tableDataSchemaStatuses(table)
-			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", tableLabel(table), table.Type, data, schema, graph, keys, relationships, table.ID)
+			fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", tableLabel(table), table.Type, data, schema, graph, keys, relationships, table.ID, table.ResourceReference)
 		}
 		return writer.Flush()
 	}}

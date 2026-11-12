@@ -96,3 +96,17 @@ func TestRootHelpGroupsAreAlphabetical(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalTableReferenceSelectsExactDataset(t *testing.T) {
+	tables := []api.TableSummary{
+		{ID: "sync-output", Name: "default", Type: "sync", ResourceReference: "vortexify://table/sync/mes/plants"},
+		{ID: "transform-output", Name: "default", Type: "transform", ResourceReference: "vortexify://table/transform/mes/plants"},
+	}
+	selected, err := resolveTable(tables, "vortexify://table/sync/mes/plants")
+	if err != nil || selected.ID != "sync-output" {
+		t.Fatalf("selected=%v err=%v", selected, err)
+	}
+	if _, err := resolveTable(tables, "vortexify://table/default"); err == nil {
+		t.Fatal("invented default link must not resolve")
+	}
+}
