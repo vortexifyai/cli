@@ -27,8 +27,8 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 		if responseOnly && args[0] != "api" {
 			return fmt.Errorf("--response-only requires run api")
 		}
-		if production && ((args[0] != "transform" && args[0] != "sync") || preview || downstream) {
-			return fmt.Errorf("--production requires a sync or transform run without --preview or --rebuild-downstream")
+		if production && ((args[0] != "api" && args[0] != "transform" && args[0] != "sync") || preview || downstream) {
+			return fmt.Errorf("--production requires an API, sync, or transform run without --preview or --rebuild-downstream")
 		}
 		if deployRun && args[0] != "sync" && args[0] != "transform" {
 			return fmt.Errorf("--run requires a sync or transform deployment")
@@ -163,7 +163,7 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 	if action == "run" {
 		command.Flags().BoolVar(&responseOnly, "response-only", false, "Print only the API return value as JSON; waits for completion")
 		command.MarkFlagsMutuallyExclusive("json", "response-only")
-		command.Flags().BoolVar(&production, "production", false, "Run the deployed sync or transform against production inputs and origin databases")
+		command.Flags().BoolVar(&production, "production", false, "Run the deployed API, sync, or transform against production inputs and origin databases")
 		command.Flags().BoolVar(&preview, "preview", false, "Sample a sync and estimate row size without publishing data or advancing checkpoints")
 	}
 	if action == "run" || action == "deploy" || action == "upgrade" {
@@ -179,7 +179,7 @@ func newExecutionCommand(opts *options, action string) *cobra.Command {
 func executionDescription(action string) string {
 	switch action {
 	case "run":
-		return "Run committed code in preview, or a deployed sync/transform with --production"
+		return "Run committed code in preview, or a deployed API/sync/transform with --production"
 	case "test":
 		return "Run SDK tests against a committed API or transform"
 	case "build":

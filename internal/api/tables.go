@@ -31,6 +31,7 @@ type TableKnowledgeGraph struct {
 	Phase              string         `json:"phase"`
 	JobID              string         `json:"job_id,omitempty"`
 	KeysComplete       bool           `json:"keys_complete"`
+	SchemaCheckOnly    bool           `json:"schema_check_only,omitempty"`
 	Relationships      map[string]int `json:"relationships"`
 	WaitingForTableIDs []string       `json:"waiting_for_table_ids"`
 	PendingJobIDs      []string       `json:"pending_job_ids"`
@@ -218,25 +219,6 @@ func (c *Client) ListTables(ctx context.Context, projectID string) ([]TableSumma
 		return result[i].Name < result[j].Name
 	})
 	return result, nil
-}
-
-func (c *Client) DeleteUploadedTable(ctx context.Context, projectID, tableID string) error {
-	response, err := c.Service(ctx, "artifacts/resources/delete_resource", projectID, map[string]any{
-		"resource_type": "table", "resource_id": tableID,
-	})
-	if err != nil {
-		return err
-	}
-	result, err := decode[struct {
-		Deleted bool `json:"deleted"`
-	}](response)
-	if err != nil {
-		return err
-	}
-	if !result.Deleted {
-		return fmt.Errorf("server did not confirm table deletion")
-	}
-	return nil
 }
 
 type TableKey struct {

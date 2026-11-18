@@ -51,6 +51,29 @@ type Resource struct {
 	PlanStatus           string                `json:"plan_status"`
 }
 
+type ResourceDeletion struct {
+	ResourceID string `json:"resource_id"`
+	Type       string `json:"type"`
+	Deleted    bool   `json:"deleted"`
+}
+
+func (c *Client) DeleteResource(ctx context.Context, projectID, kind, id string) (*ResourceDeletion, error) {
+	response, err := c.Service(ctx, "artifacts/resources/delete_resource", projectID, map[string]any{
+		"resource_type": kind, "resource_id": id,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result, err := decode[ResourceDeletion](response)
+	if err != nil {
+		return nil, err
+	}
+	if !result.Deleted {
+		return nil, fmt.Errorf("server did not confirm resource deletion")
+	}
+	return result, nil
+}
+
 func (c *Client) ListResources(ctx context.Context, projectID string) ([]Resource, error) {
 	rows, err := c.GetResourceGraph(ctx, projectID)
 	if err != nil {

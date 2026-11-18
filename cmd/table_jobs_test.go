@@ -42,3 +42,13 @@ func TestTableJobsHandlesPendingAndMissingJobs(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestTableJobsOmitsRoutineGraphChecks(t *testing.T) {
+	details := &api.TableDetails{Table: api.TableSummary{KnowledgeGraph: &api.TableKnowledgeGraph{
+		JobID: "routine-check", SchemaCheckOnly: true,
+	}}}
+	var out bytes.Buffer
+	if err := printTableJobs(&out, details); err != nil || out.Len() != 0 {
+		t.Fatal(out.String(), err)
+	}
+}

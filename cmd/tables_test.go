@@ -143,29 +143,6 @@ func TestTablesUsesExistingScopedServicesAndReportsDiscovery(t *testing.T) {
 
 }
 
-func TestTablesDeleteUsesExistingScopedDeleteRoute(t *testing.T) {
-	t.Chdir(t.TempDir())
-	t.Setenv("VORTEXIFY_TOKEN", "token")
-	config.Save(".", config.Default("project", "demo", ""))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		json.NewDecoder(r.Body).Decode(&body)
-		if r.URL.Path == "/api/v2/data/tables/list_tables" {
-			w.Write([]byte(`[{"id":"table-id","name":"sample_orders","type":"upload","status":"ready"}]`))
-			return
-		}
-		if r.URL.Path != "/api/v2/artifacts/resources/delete_resource" || body["resource_type"] != "table" || body["resource_id"] != "table-id" || body["project_id"] != "project" || body["org_id"] != "org" {
-			t.Error(r.URL.Path, body)
-		}
-		w.Write([]byte(`{"deleted":true}`))
-	}))
-	defer server.Close()
-	out, err := run(t, "--api-url", server.URL, "--org-id", "org", "tables", "delete", "sample_orders")
-	if err != nil || !strings.Contains(out, "Deleted uploaded table sample_orders") {
-		t.Fatal(out, err)
-	}
-}
-
 func TestAuthoritativeInventoryIncludesDatabaseEnvironmentsAndExcludesDerivedGraph(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("VORTEXIFY_TOKEN", "token")

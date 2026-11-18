@@ -70,28 +70,6 @@ func newTablesCommand(opts *options) *cobra.Command {
 	command.Example = "  vortexify tables\n  vortexify tables --name postgres.mes_items\n  vortexify tables --json"
 	command.Flags().StringVar(&name, "name", "", "Filter by table name or ID")
 	command.Flags().BoolVar(&asJSON, "json", false, "Print structured JSON")
-	command.AddCommand(&cobra.Command{Use: "delete <table-name>", Short: "Soft-delete an uploaded table from the project", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		_, cfg, client, err := workspace(opts)
-		if err != nil {
-			return err
-		}
-		tables, err := client.ListTables(cmd.Context(), cfg.ProjectID)
-		if err != nil {
-			return err
-		}
-		table, err := resolveTable(tables, args[0])
-		if err != nil {
-			return err
-		}
-		if table.Type != "upload" {
-			return fmt.Errorf("only uploaded tables can be deleted with this command")
-		}
-		if err = client.DeleteUploadedTable(cmd.Context(), cfg.ProjectID, table.ID); err != nil {
-			return err
-		}
-		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Deleted uploaded table %s.\n", tableLabel(*table))
-		return err
-	}})
 	return command
 }
 
@@ -220,7 +198,7 @@ func printTableJobs(out io.Writer, details *api.TableDetails) error {
 		schema = details.Table.DiscoveryJobID
 	}
 	graph := ""
-	if details.Table.KnowledgeGraph != nil {
+	if details.Table.KnowledgeGraph != nil && !details.Table.KnowledgeGraph.SchemaCheckOnly {
 		graph = details.Table.KnowledgeGraph.JobID
 	}
 	if source == "" && schema == "" && graph == "" {

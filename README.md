@@ -4,6 +4,12 @@ Build and manage Vortexify projects from your terminal. Create resources, synchr
 
 ## Changelog
 
+### v0.1.9
+
+- Support `run api --production` to invoke the deployed API against production resources.
+- Add `delete <type> <name-or-id>` for resources and uploaded tables, with confirmation and `--yes`; remove `tables delete`.
+- Omit routine knowledge graph schema checks from the table command’s job summary; failed checks remain visible.
+
 ### v0.1.8
 
 - Add project guardian status, wait and retry commands, and show new starter resources as uncommitted until their first explicit commit.
@@ -139,12 +145,26 @@ Commit can save independent resources even when others have validation issues. A
 
 Pull preserves local edits and reports conflicts. If a synchronization operation was interrupted, run `vortexify recover` before continuing. Keep the CLI-managed `.vortexify/` state out of Git.
 
+## Delete resources
+
+```sh
+vortexify delete api customer_orders
+vortexify delete sync shop/customers
+vortexify delete database crm
+vortexify delete table uploaded_orders --yes
+```
+
+`delete` soft-deletes an API, transform, app, agent, connector, sync, database, or uploaded table from the current project. Select by name, ID, or canonical resource reference. Qualify sync names as `connector/sync` when needed.
+
+The command asks for confirmation; use `--yes` to skip the prompt and `--json` for the server result. Undeploy deployed resources before deleting them. Deletion leaves local source files in place.
+
 ## Run and test workflows
 
 Commit your changes before running them. Execution uses saved code, not uncommitted local edits.
 
 ```sh
 vortexify run api customer_orders --inputs '{"customer_id":"123"}' --wait
+vortexify run api customer_orders --production --inputs '{"customer_id":"123"}' --response-only
 vortexify run transform orders --wait
 # Run the deployed transform against production inputs and origin databases:
 vortexify run transform orders --production --wait
@@ -164,6 +184,8 @@ API runs expose the actual return value at the top-level `response` key in `--js
 ```sh
 vortexify run api customer_orders --inputs '{"customer_id":"123"}' --response-only
 ```
+
+`run api --production` uses the deployed API version and production inputs, including origin databases. Deploy the API first; an explicit `--version` must match its deployed version.
 
 `--response-only` applies to `run api`, implies waiting, and cannot be combined with `--json`. Failed or stopped runs exit nonzero without printing a response.
 
