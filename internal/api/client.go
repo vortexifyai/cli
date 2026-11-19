@@ -98,6 +98,17 @@ func (c *Client) request(ctx context.Context, method, path string, body io.Reade
 	if stream {
 		client = c.StreamClient
 	}
+	// Starting an API job can synchronously invoke a 15-minute Lambda.
+	if path == "/api/v2/execution/jobs/start_resource_job" {
+		longRequest := *client
+		longRequest.Timeout = 16 * time.Minute
+		if transport, ok := client.Transport.(*http.Transport); ok {
+			longTransport := transport.Clone()
+			longTransport.ResponseHeaderTimeout = 16 * time.Minute
+			longRequest.Transport = longTransport
+		}
+		client = &longRequest
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

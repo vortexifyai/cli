@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 	"vortexify-cli/internal/resources"
 )
 
@@ -130,5 +133,48 @@ func TestProjectServiceContractWithPrefixedBaseURL(t *testing.T) {
 	}
 	if requests != 2 {
 		t.Fatal(requests)
+	}
+}
+
+type deadlineTransport func(*http.Request) (*http.Response, error)
+
+func (f deadlineTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestAPIJobStartAllowsLongExecutionAndPreservesCancellationDeadline(t *testing.T) {
+	for _, tc := range []struct {
+		path     string
+		explicit time.Duration
+		want     time.Duration
+	}{
+		{"/api/v2/execution/jobs/start_resource_job", 0, 16 * time.Minute},
+		{"/api/v2/execution/jobs/get_job_results", 0, 30 * time.Second},
+		{"/api/v2/execution/jobs/start_resource_job", 2 * time.Second, 2 * time.Second},
+	} {
+		t.Run(tc.path+tc.explicit.String(), func(t *testing.T) {
+			client := NewClient("https://example.com")
+			client.Token = func(context.Context) (string, error) { return "token", nil }
+			client.HTTPClient.Transport = deadlineTransport(func(r *http.Request) (*http.Response, error) {
+				deadline, ok := r.Context().Deadline()
+				remaining := time.Until(deadline)
+				if !ok || remaining > tc.want || remaining < tc.want-time.Second {
+					t.Errorf("unexpected deadline: %v", remaining)
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
+			})
+			ctx := context.Background()
+			if tc.explicit > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.explicit)
+				defer cancel()
+			}
+			response, err := client.Request(ctx, "POST", tc.path, map[string]any{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			if client.HTTPClient.Timeout != 30*time.Second {
+				t.Fatal("ordinary request timeout changed")
+			}
+		})
 	}
 }

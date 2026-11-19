@@ -26,6 +26,7 @@ type TableSummary struct {
 
 // TableKnowledgeGraph is the existing server's table-level discovery summary.
 type TableKnowledgeGraph struct {
+	Environment        string         `json:"environment,omitempty"`
 	TableID            string         `json:"table_id"`
 	Status             string         `json:"status"`
 	Phase              string         `json:"phase"`
@@ -222,28 +223,36 @@ func (c *Client) ListTables(ctx context.Context, projectID string) ([]TableSumma
 }
 
 type TableKey struct {
-	Columns          []string `json:"columns"`
-	UniquePercentage float64  `json:"unique_percentage"`
-	GrainDescription string   `json:"grain_description,omitempty"`
-	DuplicatesReason string   `json:"duplicates_reason,omitempty"`
+	MeasurementQueryID string         `json:"measurement_query_id,omitempty"`
+	Measurement        map[string]any `json:"measurement,omitempty"`
+	Columns            []string       `json:"columns"`
+	UniquePercentage   float64        `json:"unique_percentage"`
+	GrainDescription   string         `json:"grain_description,omitempty"`
+	DuplicatesReason   string         `json:"duplicates_reason,omitempty"`
 }
 type TableKeyAnalysis struct {
+	Environment      string     `json:"environment,omitempty"`
 	Snapshot         string     `json:"analyzed_sync_version,omitempty"`
 	Keys             []TableKey `json:"keys"`
 	Completed        bool       `json:"completed"`
 	GrainDescription string     `json:"grain_description,omitempty"`
 }
 type TableRelationship struct {
-	SourceTableID    string   `json:"source_table_id"`
-	TargetTableID    string   `json:"target_table_id"`
-	SourceColumns    []string `json:"source_columns"`
-	TargetColumns    []string `json:"target_columns"`
-	Cardinality      string   `json:"cardinality"`
-	RelationshipType string   `json:"relationship_type,omitempty"`
-	Description      string   `json:"description,omitempty"`
-	MatchingLogic    string   `json:"matching_logic,omitempty"`
+	QueryID              string         `json:"query_id,omitempty"`
+	Measurement          map[string]any `json:"measurement,omitempty"`
+	LeftMatchPercentage  *float64       `json:"left_match_percentage,omitempty"`
+	RightMatchPercentage *float64       `json:"right_match_percentage,omitempty"`
+	SourceTableID        string         `json:"source_table_id"`
+	TargetTableID        string         `json:"target_table_id"`
+	SourceColumns        []string       `json:"source_columns"`
+	TargetColumns        []string       `json:"target_columns"`
+	Cardinality          string         `json:"cardinality"`
+	RelationshipType     string         `json:"relationship_type,omitempty"`
+	Description          string         `json:"description,omitempty"`
+	MatchingLogic        string         `json:"matching_logic,omitempty"`
 }
 type TableRelationshipEvaluation struct {
+	Environment   string                    `json:"environment,omitempty"`
 	References    map[string]map[string]any `json:"references,omitempty"`
 	OtherTableID  string                    `json:"other_table_id"`
 	Status        string                    `json:"status"`

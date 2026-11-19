@@ -4,6 +4,11 @@ Build and manage Vortexify projects from your terminal. Create resources, synchr
 
 ## Changelog
 
+### v0.1.10
+
+- Allow API job-start requests to wait for API executions lasting up to 15 minutes.
+- Include key and relationship measurement details in table JSON, with separate preview and production findings.
+
 ### v0.1.9
 
 - Support `run api --production` to invoke the deployed API against production resources.
@@ -310,6 +315,18 @@ are ambiguous. Transform outputs and database tables remain listed, with automat
 knowledge graph analysis marked `not applicable`.
 
 Knowledge graph discovery analyzes sync datasets and uploaded tables. Key and relationship findings become available as analysis progresses; a completed analysis can find no meaningful key or relationship.
+
+After publication, the graph replays saved analysis queries to refresh key uniqueness
+and directional relationship match percentages. Agents investigate initial/physical
+schema changes, newly promising non-key columns (>=20% approximate uniqueness and
+>=10% relative growth since the last agent analysis), and saved key/join percentages
+that change by >10% relative to their last agent baseline. Columns already in keys are
+excluded from the new-candidate trigger. Query IDs, validated measurement counts,
+input snapshots, timestamps and errors are retained in `table --json`. Use
+`vortexify table TABLE --deployed --json` for separate production measurements;
+ordinary table inspection selects preview. A failed measurement retains its last valid
+values with an error, rather than reporting them as freshly measured.
+
 
 Use `vortexify table TABLE --verbose` or `--json` to inspect findings and associated jobs, and `vortexify logs JOB_ID` to investigate an analysis failure.
 
